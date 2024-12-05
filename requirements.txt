@@ -1,4 +1,5 @@
 aiohttp
 zeroconf
-pycryptodome
-protobuf
+pycryptodomex
+protobuf==3.20.1
+websocket-client==1.8.0
