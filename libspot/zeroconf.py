@@ -331,10 +331,10 @@ class ZeroconfServer(Closeable):
         conf: typing.Final[Session.Configuration]
         device_name: typing.Final[str]
         device_id: typing.Final[str]
-        device_type: typing.Final[Connect.DeviceType]
+        device_type = None
         preferred_locale: typing.Final[str]
 
-        def __init__(self, device_type: Connect.DeviceType, device_name: str,
+        def __init__(self, device_type, device_name: str,
                      device_id: str, preferred_locale: str,
                      conf: Session.Configuration):
             self.conf = conf

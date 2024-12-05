@@ -1,4 +1,3 @@
-from __future__ import annotations
 from Cryptodome import Random
 from librespot import util
 import io
@@ -6,14 +5,10 @@ import re
 import struct
 import typing
 
-if typing.TYPE_CHECKING:
-    from librespot.core import Session
-
-
 class CipherPair:
-    __receive_cipher: Shannon
+    __receive_cipher = None
     __receive_nonce = 0
-    __send_cipher: Shannon
+    __send_cipher = None
     __send_nonce = 0
 
     def __init__(self, send_key: bytes, receive_key: bytes):
@@ -22,7 +17,7 @@ class CipherPair:
         self.__receive_cipher = Shannon()
         self.__receive_cipher.key(receive_key)
 
-    def send_encoded(self, connection: Session.ConnectionHolder, cmd: bytes,
+    def send_encoded(self, connection, cmd: bytes,
                      payload: bytes) -> None:
         """
         Send decrypted data to the socket
@@ -44,7 +39,7 @@ class CipherPair:
         connection.write(mac)
         connection.flush()
 
-    def receive_encoded(self, connection: Session.ConnectionHolder) -> Packet:
+    def receive_encoded(self, connection):
         """
         Receive and parse decrypted data from the socket
         Args:

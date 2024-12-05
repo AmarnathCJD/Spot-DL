@@ -1,17 +1,23 @@
-from __future__ import annotations
 from Cryptodome import Random
 from Cryptodome.Cipher import AES
 from Cryptodome.Hash import HMAC, SHA1
 from Cryptodome.Protocol.KDF import PBKDF2
 from Cryptodome.PublicKey import RSA
 from Cryptodome.Signature import PKCS1_v1_5
-from librespot import util, Version
-from librespot.audio import CdnManager, PlayableContentFeeder
+from libspot import util
 from libspot.util import AudioKeyManager
 from libspot.crypto import CipherPair, DiffieHellman, Packet
 from libspot.mercury import MercuryClient, MercuryRequests, RawMercuryRequest
 from libspot.metadata import EpisodeId, ShowId, TrackId
-from librespot.proto import Authentication_pb2 as Authentication, ClientToken_pb2 as ClientToken, Connect_pb2 as Connect, Connectivity_pb2 as Connectivity, Keyexchange_pb2 as Keyexchange, Metadata_pb2 as Metadata, Playlist4External_pb2 as Playlist4External
+from libspot.proto import (
+    Authentication_pb2 as Authentication,
+    ClientToken_pb2 as ClientToken,
+    Connect_pb2 as Connect,
+    Connectivity_pb2 as Connectivity,
+    Keyexchange_pb2 as Keyexchange,
+    Metadata_pb2 as Metadata,
+    Playlist4External_pb2 as Playlist4External,
+)
 from libspot.proto.ExplicitContentPubsub_pb2 import UserAttributesUpdate
 from libspot.structure import Closeable, MessageListener, RequestListener, SubListener
 import base64
@@ -39,20 +45,25 @@ class ApiClient(Closeable):
     logger = logging.getLogger("ApiClient")
     __base_url: str
     __client_token_str: str = None
-    __session: Session
+    __session = None
 
-    def __init__(self, session: Session):
+    def __init__(self, session):
         self.__session = session
         self.__base_url = "https://{}".format(ApResolver.get_random_spclient())
 
     def build_request(
-            self, method: str, suffix: str,
-            headers: typing.Union[None, typing.Dict[str, str]],
-            body: typing.Union[None, bytes]) -> requests.PreparedRequest:
+        self,
+        method: str,
+        suffix: str,
+        headers: typing.Union[None, typing.Dict[str, str]],
+        body: typing.Union[None, bytes],
+    ) -> requests.PreparedRequest:
         if self.__client_token_str is None:
             resp = self.__client_token()
             self.__client_token_str = resp.granted_token.token
-            self.logger.debug("Updated client token: {}".format(self.__client_token_str))
+            self.logger.debug(
+                "Updated client token: {}".format(self.__client_token_str)
+            )
 
         request = requests.PreparedRequest()
         request.method = method
@@ -61,41 +72,51 @@ class ApiClient(Closeable):
         if headers is not None:
             request.headers = headers
         request.headers["Authorization"] = "Bearer {}".format(
-            self.__session.tokens().get("playlist-read"))
+            self.__session.tokens().get("playlist-read")
+        )
         request.headers["client-token"] = self.__client_token_str
         request.url = self.__base_url + suffix
         return request
 
-    def send(self, method: str, suffix: str,
-             headers: typing.Union[None, typing.Dict[str, str]],
-             body: typing.Union[None, bytes]) -> requests.Response:
+    def send(
+        self,
+        method: str,
+        suffix: str,
+        headers: typing.Union[None, typing.Dict[str, str]],
+        body: typing.Union[None, bytes],
+    ) -> requests.Response:
         response = self.__session.client().send(
-            self.build_request(method, suffix, headers, body))
+            self.build_request(method, suffix, headers, body)
+        )
         return response
 
-    def put_connect_state(self, connection_id: str,
-                          proto) -> None:
+    def put_connect_state(self, connection_id: str, proto) -> None:
         response = self.send(
             "PUT",
             "/connect-state/v1/devices/{}".format(self.__session.device_id()),
             {
                 "Content-Type": "application/protobuf",
-                "X-Spotify-Connection-Id": connection_id
+                "X-Spotify-Connection-Id": connection_id,
             },
             proto.SerializeToString(),
         )
         if response.status_code == 413:
             self.logger.warning(
-                "PUT state payload is too large: {} bytes uncompressed.".
-                format(len(proto.SerializeToString())))
+                "PUT state payload is too large: {} bytes uncompressed.".format(
+                    len(proto.SerializeToString())
+                )
+            )
         elif response.status_code != 200:
-            self.logger.warning("PUT state returned {}. headers: {}".format(
-                response.status_code, response.headers))
+            self.logger.warning(
+                "PUT state returned {}. headers: {}".format(
+                    response.status_code, response.headers
+                )
+            )
 
     def get_metadata_4_track(self, track: TrackId):
-        response = self.send("GET",
-                             "/metadata/4/track/{}".format(track.hex_id()),
-                             None, None)
+        response = self.send(
+            "GET", "/metadata/4/track/{}".format(track.hex_id()), None, None
+        )
         ApiClient.StatusCodeException.check_status(response)
         body = response.content
         if body is None:
@@ -105,9 +126,9 @@ class ApiClient(Closeable):
         return proto
 
     def get_metadata_4_episode(self, episode: EpisodeId):
-        response = self.send("GET",
-                             "/metadata/4/episode/{}".format(episode.hex_id()),
-                             None, None)
+        response = self.send(
+            "GET", "/metadata/4/episode/{}".format(episode.hex_id()), None, None
+        )
         ApiClient.StatusCodeException.check_status(response)
         body = response.content
         if body is None:
@@ -117,9 +138,9 @@ class ApiClient(Closeable):
         return proto
 
     def get_metadata_4_album(self, album):
-        response = self.send("GET",
-                             "/metadata/4/album/{}".format(album.hex_id()),
-                             None, None)
+        response = self.send(
+            "GET", "/metadata/4/album/{}".format(album.hex_id()), None, None
+        )
         ApiClient.StatusCodeException.check_status(response)
 
         body = response.content
@@ -130,9 +151,9 @@ class ApiClient(Closeable):
         return proto
 
     def get_metadata_4_artist(self, artist):
-        response = self.send("GET",
-                             "/metadata/4/artist/{}".format(artist.hex_id()),
-                             None, None)
+        response = self.send(
+            "GET", "/metadata/4/artist/{}".format(artist.hex_id()), None, None
+        )
         ApiClient.StatusCodeException.check_status(response)
         body = response.content
         if body is None:
@@ -141,10 +162,10 @@ class ApiClient(Closeable):
         proto.ParseFromString(body)
         return proto
 
-    def get_metadata_4_show(self, show: ShowId) -> Metadata.Show:
-        response = self.send("GET",
-                             "/metadata/4/show/{}".format(show.hex_id()), None,
-                             None)
+    def get_metadata_4_show(self, show: ShowId):
+        response = self.send(
+            "GET", "/metadata/4/show/{}".format(show.hex_id()), None, None
+        )
         ApiClient.StatusCodeException.check_status(response)
         body = response.content
         if body is None:
@@ -153,10 +174,10 @@ class ApiClient(Closeable):
         proto.ParseFromString(body)
         return proto
 
-    def get_playlist(self, _id: PlaylistId) -> Playlist4External.SelectedListContent:
-        response = self.send("GET",
-                             "/playlist/v2/playlist/{}".format(_id.id()), None,
-                             None)
+    def get_playlist(self, _id):
+        response = self.send(
+            "GET", "/playlist/v2/playlist/{}".format(_id.id()), None, None
+        )
         ApiClient.StatusCodeException.check_status(response)
         body = response.content
         if body is None:
@@ -173,7 +194,7 @@ class ApiClient(Closeable):
             request_type=ClientToken.ClientTokenRequestType.REQUEST_CLIENT_DATA_REQUEST,
             client_data=ClientToken.ClientDataRequest(
                 client_id=MercuryRequests.keymaster_client_id,
-                client_version=Version.version_name,
+                client_version=util.Version.version_name,
                 connectivity_sdk_data=Connectivity.ConnectivitySdkData(
                     device_id=self.__session.device_id(),
                     platform_specific_data=Connectivity.PlatformSpecificData(
@@ -191,12 +212,14 @@ class ApiClient(Closeable):
             ),
         )
 
-        resp = requests.post("https://clienttoken.spotify.com/v1/clienttoken",
-                            proto_req.SerializeToString(),
-                            headers={
-                                "Accept": "application/x-protobuf",
-                                "Content-Encoding": "",
-                            })
+        resp = requests.post(
+            "https://clienttoken.spotify.com/v1/clienttoken",
+            proto_req.SerializeToString(),
+            headers={
+                "Accept": "application/x-protobuf",
+                "Content-Encoding": "",
+            },
+        )
 
         ApiClient.StatusCodeException.check_status(resp)
 
@@ -229,8 +252,7 @@ class ApResolver:
         Returns:
             The resulting object will be returned
         """
-        response = requests.get("{}?type={}".format(ApResolver.base_url,
-                                                    service_type))
+        response = requests.get("{}?type={}".format(ApResolver.base_url, service_type))
         return response.json()
 
     @staticmethod
@@ -278,25 +300,25 @@ class ApResolver:
 
 class DealerClient(Closeable):
     logger = logging.getLogger("DealerClient")
-    __connection: typing.Union[ConnectionHolder, None]
+    __connection = None
     __last_scheduled_reconnection: typing.Union[sched.Event, None]
     __message_listeners: typing.Dict[MessageListener, typing.List[str]] = {}
     __message_listeners_lock = threading.Condition()
     __request_listeners: typing.Dict[str, RequestListener] = {}
     __request_listeners_lock = threading.Condition()
     __scheduler = sched.scheduler()
-    __session: Session
+    __session = None
     __worker = concurrent.futures.ThreadPoolExecutor()
 
-    def __init__(self, session: Session):
+    def __init__(self, session):
         self.__session = session
 
-    def add_message_listener(self, listener: MessageListener,
-                             uris: list[str]) -> None:
+    def add_message_listener(self, listener: MessageListener, uris: list[str]) -> None:
         with self.__message_listeners_lock:
             if listener in self.__message_listeners:
                 raise TypeError(
-                    "A listener for {} has already been added.".format(uris))
+                    "A listener for {} has already been added.".format(uris)
+                )
             self.__message_listeners[listener] = uris
             self.__message_listeners_lock.notify_all()
 
@@ -304,7 +326,8 @@ class DealerClient(Closeable):
         with self.__request_listeners_lock:
             if uri in self.__request_listeners:
                 raise TypeError(
-                    "A listener for '{}' has already been added.".format(uri))
+                    "A listener for '{}' has already been added.".format(uri)
+                )
             self.__request_listeners[uri] = listener
             self.__request_listeners_lock.notify_all()
 
@@ -313,9 +336,13 @@ class DealerClient(Closeable):
 
     def connect(self) -> None:
         self.__connection = DealerClient.ConnectionHolder(
-            self.__session, self, "wss://{}/?access_token={}".format(
+            self.__session,
+            self,
+            "wss://{}/?access_token={}".format(
                 ApResolver.get_random_dealer(),
-                self.__session.tokens().get("playlist-read")))
+                self.__session.tokens().get("playlist-read"),
+            ),
+        )
 
     def connection_invalided(self) -> None:
         self.__connection = None
@@ -325,8 +352,7 @@ class DealerClient(Closeable):
             self.__last_scheduled_reconnection = None
             self.connect()
 
-        self.__last_scheduled_reconnection = self.__scheduler.enter(
-            10, 1, anonymous)
+        self.__last_scheduled_reconnection = self.__scheduler.enter(10, 1, anonymous)
 
     def handle_message(self, obj: typing.Any) -> None:
         uri = obj.get("uri")
@@ -373,8 +399,10 @@ class DealerClient(Closeable):
         sender = payload.get("sent_by_device_id")
         command = payload.get("command")
         self.logger.debug(
-            "Received request. [mid: {}, key: {}, pid: {}, sender: {}, command: {}]"
-            .format(mid, key, pid, sender, command))
+            "Received request. [mid: {}, key: {}, pid: {}, sender: {}, command: {}]".format(
+                mid, key, pid, sender, command
+            )
+        )
         interesting = False
         with self.__request_listeners_lock:
             for mid_prefix in self.__request_listeners:
@@ -387,8 +415,8 @@ class DealerClient(Closeable):
                         if self.__connection is not None:
                             self.__connection.send_reply(key, result)
                         self.logger.warning(
-                            "Handled request. [key: {}, result: {}]".format(
-                                key, result))
+                            "Handled request. [key: {}, result: {}]".format(key, result)
+                        )
 
                     self.__worker.submit(anonymous)
         if not interesting:
@@ -420,16 +448,15 @@ class DealerClient(Closeable):
 
     class ConnectionHolder(Closeable):
         __closed = False
-        __dealer_client: DealerClient
+        __dealer_client = None
         __last_scheduled_ping: sched.Event
         __received_pong = False
         __scheduler = sched.scheduler()
-        __session: Session
+        __session = None
         __url: str
         __ws: websocket.WebSocketApp
 
-        def __init__(self, session: Session, dealer_client: DealerClient,
-                     url: str):
+        def __init__(self, session, dealer_client, url: str):
             self.__session = session
             self.__dealer_client = dealer_client
             self.__url = url
@@ -446,7 +473,8 @@ class DealerClient(Closeable):
             if self.__closed:
                 return
             self.__dealer_client.logger.warning(
-                "An exception occurred. Reconnecting...")
+                "An exception occurred. Reconnecting..."
+            )
             self.close()
 
         def on_message(self, ws: websocket.WebSocketApp, text: str):
@@ -462,16 +490,18 @@ class DealerClient(Closeable):
             elif typ == MessageType.PING:
                 pass
             else:
-                raise RuntimeError("Unknown message type for {}".format(
-                    typ.value))
+                raise RuntimeError("Unknown message type for {}".format(typ.value))
 
         def on_open(self, ws: websocket.WebSocketApp):
             if self.__closed:
                 self.__dealer_client.logger.fatal(
-                    "I wonder what happened here... Terminating. [closed: {}]".
-                    format(self.__closed))
+                    "I wonder what happened here... Terminating. [closed: {}]".format(
+                        self.__closed
+                    )
+                )
             self.__dealer_client.logger.debug(
-                "Dealer connected! [url: {}]".format(self.__url))
+                "Dealer connected! [url: {}]".format(self.__url)
+            )
 
             def anonymous():
                 self.send_ping()
@@ -489,20 +519,20 @@ class DealerClient(Closeable):
                     self.__received_pong = False
 
                 self.__scheduler.enter(3, 1, anonymous2)
-                self.__last_scheduled_ping = self.__scheduler.enter(
-                    30, 1, anonymous)
+                self.__last_scheduled_ping = self.__scheduler.enter(30, 1, anonymous)
 
-            self.__last_scheduled_ping = self.__scheduler.enter(
-                30, 1, anonymous)
+            self.__last_scheduled_ping = self.__scheduler.enter(30, 1, anonymous)
 
         def send_ping(self):
-            self.__ws.send("{\"type\":\"ping\"}")
+            self.__ws.send('{"type":"ping"}')
 
-        def send_reply(self, key: str, result: DealerClient.RequestResult):
-            success = "true" if result == DealerClient.RequestResult.SUCCESS else "false"
+        def send_reply(self, key: str, result):
+            success = (
+                "true" if result == DealerClient.RequestResult.SUCCESS else "false"
+            )
             self.__ws.send(
-                "{\"type\":\"reply\",\"key\":\"%s\",\"payload\":{\"success\":%s}"
-                % (key, success))
+                '{"type":"reply","key":"%s","payload":{"success":%s}' % (key, success)
+            )
 
     class RequestResult(enum.Enum):
         UNKNOWN_SEND_COMMAND_RESULT = 0
@@ -517,29 +547,31 @@ class DealerClient(Closeable):
 
 class EventService(Closeable):
     logger = logging.getLogger("EventService")
-    __session: Session
+    __session = None
     __worker = concurrent.futures.ThreadPoolExecutor()
 
-    def __init__(self, session: Session):
+    def __init__(self, session):
         self.__session = session
 
-    def __worker_callback(self, event_builder: EventBuilder):
+    def __worker_callback(self, event_builder):
         try:
             body = event_builder.to_array()
             resp = self.__session.mercury().send_sync(
-                RawMercuryRequest.Builder().set_uri(
-                    "hm://event-service/v1/events").set_method("POST").
-                add_user_field("Accept-Language", "en").add_user_field(
-                    "X-ClientTimeStamp",
-                    int(time.time() * 1000)).add_payload_part(body).build())
-            self.logger.debug("Event sent. body: {}, result: {}".format(
-                body, resp.status_code))
+                RawMercuryRequest.Builder()
+                .set_uri("hm://event-service/v1/events")
+                .set_method("POST")
+                .add_user_field("Accept-Language", "en")
+                .add_user_field("X-ClientTimeStamp", int(time.time() * 1000))
+                .add_payload_part(body)
+                .build()
+            )
+            self.logger.debug(
+                "Event sent. body: {}, result: {}".format(body, resp.status_code)
+            )
         except IOError as ex:
-            self.logger.error("Failed sending event: {} {}".format(
-                event_builder, ex))
+            self.logger.error("Failed sending event: {} {}".format(event_builder, ex))
 
-    def send_event(self, event_or_builder: typing.Union[GenericEvent,
-                                                        EventBuilder]):
+    def send_event(self, event_or_builder):
         if type(event_or_builder) is EventService.GenericEvent:
             builder = event_or_builder.build()
         elif type(event_or_builder) is EventService.EventBuilder:
@@ -572,13 +604,13 @@ class EventService(Closeable):
             self.unknown = unknown
 
     class GenericEvent:
-        def build(self) -> EventService.EventBuilder:
+        def build(self):
             raise NotImplementedError
 
     class EventBuilder:
         body: io.BytesIO
 
-        def __init__(self, event_type: EventService.Type):
+        def __init__(self, event_type):
             self.body = io.BytesIO()
             self.append_no_delimiter(event_type.value[0])
             self.append(event_type.value[1])
@@ -588,9 +620,7 @@ class EventService(Closeable):
                 s = ""
             self.body.write(s.encode())
 
-        def append(self,
-                   c: int = None,
-                   s: str = None) -> EventService.EventBuilder:
+        def append(self, c: int = None, s: str = None):
             if c is None and s is None or c is not None and s is not None:
                 raise TypeError()
             if c is not None:
@@ -632,51 +662,54 @@ class MessageType(enum.Enum):
 class Session(Closeable, MessageListener, SubListener):
     cipher_pair: typing.Union[CipherPair, None]
     country_code: str = "EN"
-    connection: typing.Union[ConnectionHolder, None]
+    connection = None
     logger = logging.getLogger("Session")
     scheduled_reconnect: typing.Union[sched.Event, None] = None
     scheduler = sched.scheduler(time.time)
     __api: ApiClient
-    __ap_welcome: Authentication.APWelcome
+    __ap_welcome = None
     __audio_key_manager: typing.Union[AudioKeyManager, None] = None
     __auth_lock = threading.Condition()
     __auth_lock_bool = False
-    __cdn_manager: typing.Union[CdnManager, None]
     __client: typing.Union[requests.Session, None]
     __closed = False
     __closing = False
-    __content_feeder: typing.Union[PlayableContentFeeder, None]
     __dealer_client: typing.Union[DealerClient, None] = None
     __event_service: typing.Union[EventService, None] = None
     __keys: DiffieHellman
     __mercury_client: MercuryClient
-    __receiver: typing.Union[Receiver, None] = None
-    __search: typing.Union[SearchManager, None]
-    __server_key = b"\xac\xe0F\x0b\xff\xc20\xaf\xf4k\xfe\xc3\xbf\xbf\x86=" \
-                   b"\xa1\x91\xc6\xcc3l\x93\xa1O\xb3\xb0\x16\x12\xac\xacj" \
-                   b"\xf1\x80\xe7\xf6\x14\xd9B\x9d\xbe.4fC\xe3b\xd22z\x1a" \
-                   b"\r\x92;\xae\xdd\x14\x02\xb1\x81U\x05a\x04\xd5,\x96\xa4" \
-                   b"L\x1e\xcc\x02J\xd4\xb2\x0c\x00\x1f\x17\xed\xc2/\xc45" \
-                   b"!\xc8\xf0\xcb\xae\xd2\xad\xd7+\x0f\x9d\xb3\xc52\x1a*" \
-                   b"\xfeY\xf3Z\r\xach\xf1\xfab\x1e\xfb,\x8d\x0c\xb79-\x92" \
-                   b"G\xe3\xd75\x1am\xbd$\xc2\xae%[\x88\xff\xabs)\x8a\x0b" \
-                   b"\xcc\xcd\x0cXg1\x89\xe8\xbd4\x80xJ_\xc9k\x89\x9d\x95k" \
-                   b"\xfc\x86\xd7O3\xa6x\x17\x96\xc9\xc3-\r2\xa5\xab\xcd\x05'" \
-                   b"\xe2\xf7\x10\xa3\x96\x13\xc4/\x99\xc0'\xbf\xed\x04\x9c" \
-                   b"<'X\x04\xb6\xb2\x19\xf9\xc1/\x02\xe9Hc\xec\xa1\xb6B\xa0" \
-                   b"\x9dH%\xf8\xb3\x9d\xd0\xe8j\xf9HM\xa1\xc2\xba\x860B\xea" \
-                   b"\x9d\xb3\x08l\x19\x0eH\xb3\x9df\xeb\x00\x06\xa2Z\xee\xa1" \
-                   b"\x1b\x13\x87<\xd7\x19\xe6U\xbd"
-    __token_provider: typing.Union[TokenProvider, None]
+    __receiver = None
+    __search = None
+    __server_key = (
+        b"\xac\xe0F\x0b\xff\xc20\xaf\xf4k\xfe\xc3\xbf\xbf\x86="
+        b"\xa1\x91\xc6\xcc3l\x93\xa1O\xb3\xb0\x16\x12\xac\xacj"
+        b"\xf1\x80\xe7\xf6\x14\xd9B\x9d\xbe.4fC\xe3b\xd22z\x1a"
+        b"\r\x92;\xae\xdd\x14\x02\xb1\x81U\x05a\x04\xd5,\x96\xa4"
+        b"L\x1e\xcc\x02J\xd4\xb2\x0c\x00\x1f\x17\xed\xc2/\xc45"
+        b"!\xc8\xf0\xcb\xae\xd2\xad\xd7+\x0f\x9d\xb3\xc52\x1a*"
+        b"\xfeY\xf3Z\r\xach\xf1\xfab\x1e\xfb,\x8d\x0c\xb79-\x92"
+        b"G\xe3\xd75\x1am\xbd$\xc2\xae%[\x88\xff\xabs)\x8a\x0b"
+        b"\xcc\xcd\x0cXg1\x89\xe8\xbd4\x80xJ_\xc9k\x89\x9d\x95k"
+        b"\xfc\x86\xd7O3\xa6x\x17\x96\xc9\xc3-\r2\xa5\xab\xcd\x05'"
+        b"\xe2\xf7\x10\xa3\x96\x13\xc4/\x99\xc0'\xbf\xed\x04\x9c"
+        b"<'X\x04\xb6\xb2\x19\xf9\xc1/\x02\xe9Hc\xec\xa1\xb6B\xa0"
+        b"\x9dH%\xf8\xb3\x9d\xd0\xe8j\xf9HM\xa1\xc2\xba\x860B\xea"
+        b"\x9d\xb3\x08l\x19\x0eH\xb3\x9df\xeb\x00\x06\xa2Z\xee\xa1"
+        b"\x1b\x13\x87<\xd7\x19\xe6U\xbd"
+    )
+    __token_provider = None
     __user_attributes = {}
 
-    def __init__(self, inner: Inner, address: str) -> None:
+    def __init__(self, inner, address: str) -> None:
         self.__client = Session.create_client(inner.conf)
         self.connection = Session.ConnectionHolder.create(address, None)
         self.__inner = inner
         self.__keys = DiffieHellman()
-        self.logger.info("Created new session! device_id: {}, ap: {}".format(
-            inner.device_id, address))
+        self.logger.info(
+            "Created new session! device_id: {}, ap: {}".format(
+                inner.device_id, address
+            )
+        )
 
     def api(self) -> ApiClient:
         self.__wait_auth_lock()
@@ -696,8 +729,7 @@ class Session(Closeable, MessageListener, SubListener):
             raise RuntimeError("Session isn't authenticated!")
         return self.__audio_key_manager
 
-    def authenticate(self,
-                     credential: Authentication.LoginCredentials) -> None:
+    def authenticate(self, credential) -> None:
         """
         Log in to Spotify
         Args:
@@ -709,25 +741,19 @@ class Session(Closeable, MessageListener, SubListener):
             self.__token_provider = TokenProvider(self)
             self.__audio_key_manager = AudioKeyManager(self)
             self.__api = ApiClient(self)
-            self.__cdn_manager = CdnManager(self)
-            self.__content_feeder = PlayableContentFeeder(self)
             self.__dealer_client = DealerClient(self)
             self.__search = SearchManager(self)
             self.__event_service = EventService(self)
             self.__auth_lock_bool = False
             self.__auth_lock.notify_all()
         self.dealer().connect()
-        self.logger.info("Authenticated as {}!".format(
-            self.__ap_welcome.canonical_username))
+        self.logger.info(
+            "Authenticated as {}!".format(self.__ap_welcome.canonical_username)
+        )
         self.mercury().interested_in("spotify:user:attributes:update", self)
         self.dealer().add_message_listener(
-            self, ["hm://connect-state/v1/connect/logout"])
-
-    def cdn(self) -> CdnManager:
-        self.__wait_auth_lock()
-        if self.__cdn_manager is None:
-            raise RuntimeError("Session isn't authenticated!")
-        return self.__cdn_manager
+            self, ["hm://connect-state/v1/connect/logout"]
+        )
 
     def client(self) -> requests.Session:
         return self.__client
@@ -736,8 +762,9 @@ class Session(Closeable, MessageListener, SubListener):
         """
         Close instance
         """
-        self.logger.info("Closing session. device_id: {}".format(
-            self.__inner.device_id))
+        self.logger.info(
+            "Closing session. device_id: {}".format(self.__inner.device_id)
+        )
         self.__closing = True
         if self.__dealer_client is not None:
             self.__dealer_client.close()
@@ -763,8 +790,7 @@ class Session(Closeable, MessageListener, SubListener):
             self.__ap_welcome = None
             self.cipher_pair = None
             self.__closed = True
-        self.logger.info("Closed session. device_id: {}".format(
-            self.__inner.device_id))
+        self.logger.info("Closed session. device_id: {}".format(self.__inner.device_id))
 
     def connect(self) -> None:
         """
@@ -774,14 +800,14 @@ class Session(Closeable, MessageListener, SubListener):
         # Send ClientHello
         nonce = Random.get_random_bytes(0x10)
         client_hello_proto = Keyexchange.ClientHello(
-            build_info=Version.standard_build_info(),
+            build_info=util.Version.standard_build_info(),
             client_nonce=nonce,
-            cryptosuites_supported=[
-                Keyexchange.Cryptosuite.CRYPTO_SUITE_SHANNON
-            ],
+            cryptosuites_supported=[Keyexchange.Cryptosuite.CRYPTO_SUITE_SHANNON],
             login_crypto_hello=Keyexchange.LoginCryptoHelloUnion(
                 diffie_hellman=Keyexchange.LoginCryptoDiffieHellmanHello(
-                    gc=self.__keys.public_key_bytes(), server_keys_known=1), ),
+                    gc=self.__keys.public_key_bytes(), server_keys_known=1
+                ),
+            ),
             padding=b"\x1e",
         )
         client_hello_bytes = client_hello_proto.SerializeToString()
@@ -795,24 +821,26 @@ class Session(Closeable, MessageListener, SubListener):
         # Read APResponseMessage
         ap_response_message_length = self.connection.read_int()
         acc.write_int(ap_response_message_length)
-        ap_response_message_bytes = self.connection.read(
-            ap_response_message_length - 4)
+        ap_response_message_bytes = self.connection.read(ap_response_message_length - 4)
         acc.write(ap_response_message_bytes)
         ap_response_message_proto = Keyexchange.APResponseMessage()
         ap_response_message_proto.ParseFromString(ap_response_message_bytes)
         shared_key = util.int_to_bytes(
             self.__keys.compute_shared_key(
-                ap_response_message_proto.challenge.login_crypto_challenge.
-                diffie_hellman.gs))
+                ap_response_message_proto.challenge.login_crypto_challenge.diffie_hellman.gs
+            )
+        )
         # Check gs_signature
         rsa = RSA.construct((int.from_bytes(self.__server_key, "big"), 65537))
         pkcs1_v1_5 = PKCS1_v1_5.new(rsa)
         sha1 = SHA1.new()
-        sha1.update(ap_response_message_proto.challenge.login_crypto_challenge.
-                    diffie_hellman.gs)
+        sha1.update(
+            ap_response_message_proto.challenge.login_crypto_challenge.diffie_hellman.gs
+        )
         if not pkcs1_v1_5.verify(
-                sha1, ap_response_message_proto.challenge.
-                login_crypto_challenge.diffie_hellman.gs_signature):
+            sha1,
+            ap_response_message_proto.challenge.login_crypto_challenge.diffie_hellman.gs_signature,
+        ):
             raise RuntimeError("Failed signature check!")
         # Solve challenge
         buffer = io.BytesIO()
@@ -829,10 +857,13 @@ class Session(Closeable, MessageListener, SubListener):
             crypto_response=Keyexchange.CryptoResponseUnion(),
             login_crypto_response=Keyexchange.LoginCryptoResponseUnion(
                 diffie_hellman=Keyexchange.LoginCryptoDiffieHellmanResponse(
-                    hmac=challenge)),
+                    hmac=challenge
+                )
+            ),
             pow_response=Keyexchange.PoWResponseUnion(),
         )
-        client_response_plaintext_bytes = client_response_plaintext_proto.SerializeToString(
+        client_response_plaintext_bytes = (
+            client_response_plaintext_proto.SerializeToString()
         )
         self.connection.write_int(4 + len(client_response_plaintext_bytes))
         self.connection.write(client_response_plaintext_bytes)
@@ -841,8 +872,7 @@ class Session(Closeable, MessageListener, SubListener):
             self.connection.set_timeout(1)
             scrap = self.connection.read(4)
             if len(scrap) == 4:
-                payload = self.connection.read(
-                    struct.unpack(">i", scrap)[0] - 4)
+                payload = self.connection.read(struct.unpack(">i", scrap)[0] - 4)
                 failed = Keyexchange.APResponseMessage()
                 failed.ParseFromString(payload)
                 raise RuntimeError(failed)
@@ -856,14 +886,8 @@ class Session(Closeable, MessageListener, SubListener):
             self.__auth_lock_bool = True
         self.logger.info("Connection successfully!")
 
-    def content_feeder(self) -> PlayableContentFeeder:
-        self.__wait_auth_lock()
-        if self.__content_feeder is None:
-            raise RuntimeError("Session isn't authenticated!")
-        return self.__content_feeder
-
     @staticmethod
-    def create_client(conf: Configuration) -> requests.Session:
+    def create_client(conf) -> requests.Session:
         client = requests.Session()
         return client
 
@@ -879,7 +903,7 @@ class Session(Closeable, MessageListener, SubListener):
     def device_name(self) -> str:
         return self.__inner.device_name
 
-    def device_type(self) -> Connect.DeviceType:
+    def device_type(self):
         return self.__inner.device_type
 
     def event(self, resp: MercuryClient.Response) -> None:
@@ -888,12 +912,16 @@ class Session(Closeable, MessageListener, SubListener):
             attributes_update.ParseFromString(resp.payload)
             for pair in attributes_update.pairs_list:
                 self.__user_attributes[pair.key] = pair.value
-                self.logger.info("Updated user attribute: {} -> {}".format(
-                    pair.key, pair.value))
+                self.logger.info(
+                    "Updated user attribute: {} -> {}".format(pair.key, pair.value)
+                )
 
     def get_user_attribute(self, key: str, fallback: str = None) -> str:
-        return self.__user_attributes.get(key) if self.__user_attributes.get(
-            key) is not None else fallback
+        return (
+            self.__user_attributes.get(key)
+            if self.__user_attributes.get(key) is not None
+            else fallback
+        )
 
     def is_valid(self) -> bool:
         if self.__closed:
@@ -907,8 +935,7 @@ class Session(Closeable, MessageListener, SubListener):
             raise RuntimeError("Session isn't authenticated!")
         return self.__mercury_client
 
-    def on_message(self, uri: str, headers: typing.Dict[str, str],
-                   payload: bytes):
+    def on_message(self, uri: str, headers: typing.Dict[str, str], payload: bytes):
         if uri == "hm://connect-state/v1/connect/logout":
             self.close()
 
@@ -926,8 +953,7 @@ class Session(Closeable, MessageListener, SubListener):
             return
         for i in range(len(product)):
             self.__user_attributes[product[i].tag] = product[i].text
-        self.logger.debug("Parsed product info: {}".format(
-            self.__user_attributes))
+        self.logger.debug("Parsed product info: {}".format(self.__user_attributes))
 
     def preferred_locale(self) -> str:
         return self.__inner.preferred_locale
@@ -940,7 +966,8 @@ class Session(Closeable, MessageListener, SubListener):
             self.connection.close()
             self.__receiver.stop()
         self.connection = Session.ConnectionHolder.create(
-            ApResolver.get_random_accesspoint(), self.__inner.conf)
+            ApResolver.get_random_accesspoint(), self.__inner.conf
+        )
         self.connect()
         self.__authenticate_partial(
             Authentication.LoginCredentials(
@@ -950,13 +977,14 @@ class Session(Closeable, MessageListener, SubListener):
             ),
             True,
         )
-        self.logger.info("Re-authenticated as {}!".format(
-            self.__ap_welcome.canonical_username))
+        self.logger.info(
+            "Re-authenticated as {}!".format(self.__ap_welcome.canonical_username)
+        )
 
     def reconnecting(self) -> bool:
         return not self.__closing and not self.__closed and self.connection is None
 
-    def search(self) -> SearchManager:
+    def search(self):
         self.__wait_auth_lock()
         if self.__search is None:
             raise RuntimeError("Session isn't authenticated!")
@@ -979,7 +1007,7 @@ class Session(Closeable, MessageListener, SubListener):
                 self.__auth_lock.wait()
             self.__send_unchecked(cmd, payload)
 
-    def tokens(self) -> TokenProvider:
+    def tokens(self):
         self.__wait_auth_lock()
         if self.__token_provider is None:
             raise RuntimeError("Session isn't authenticated!")
@@ -988,9 +1016,7 @@ class Session(Closeable, MessageListener, SubListener):
     def username(self):
         return self.__ap_welcome.canonical_username
 
-    def __authenticate_partial(self,
-                               credential: Authentication.LoginCredentials,
-                               remove_lock: bool) -> None:
+    def __authenticate_partial(self, credential, remove_lock: bool) -> None:
         """
         Login to Spotify
         Args:
@@ -1003,14 +1029,14 @@ class Session(Closeable, MessageListener, SubListener):
             system_info=Authentication.SystemInfo(
                 os=Authentication.Os.OS_UNKNOWN,
                 cpu_family=Authentication.CpuFamily.CPU_UNKNOWN,
-                system_information_string=Version.system_info_string(),
+                system_information_string=util.Version.system_info_string(),
                 device_id=self.__inner.device_id,
             ),
-            version_string=Version.version_string(),
+            version_string=util.Version.version_string(),
         )
         self.__send_unchecked(
-            Packet.Type.login,
-            client_response_encrypted_proto.SerializeToString())
+            Packet.Type.login, client_response_encrypted_proto.SerializeToString()
+        )
         packet = self.cipher_pair.receive_encoded(self.connection)
         if packet.is_cmd(Packet.Type.ap_welcome):
             self.__ap_welcome = Authentication.APWelcome()
@@ -1019,11 +1045,12 @@ class Session(Closeable, MessageListener, SubListener):
             bytes0x0f = Random.get_random_bytes(0x14)
             self.__send_unchecked(Packet.Type.unknown_0x0f, bytes0x0f)
             preferred_locale = io.BytesIO()
-            preferred_locale.write(b"\x00\x00\x10\x00\x02preferred-locale" +
-                                   self.__inner.preferred_locale.encode())
+            preferred_locale.write(
+                b"\x00\x00\x10\x00\x02preferred-locale"
+                + self.__inner.preferred_locale.encode()
+            )
             preferred_locale.seek(0)
-            self.__send_unchecked(Packet.Type.preferred_locale,
-                                  preferred_locale.read())
+            self.__send_unchecked(Packet.Type.preferred_locale, preferred_locale.read())
             if remove_lock:
                 with self.__auth_lock:
                     self.__auth_lock_bool = False
@@ -1031,17 +1058,19 @@ class Session(Closeable, MessageListener, SubListener):
             if self.__inner.conf.store_credentials:
                 reusable = self.__ap_welcome.reusable_auth_credentials
                 reusable_type = Authentication.AuthenticationType.Name(
-                    self.__ap_welcome.reusable_auth_credentials_type)
+                    self.__ap_welcome.reusable_auth_credentials_type
+                )
                 if self.__inner.conf.stored_credentials_file is None:
-                    raise TypeError(
-                        "The file path to be saved is not specified")
+                    raise TypeError("The file path to be saved is not specified")
                 with open(self.__inner.conf.stored_credentials_file, "w") as f:
                     json.dump(
                         {
                             "username": self.__ap_welcome.canonical_username,
                             "credentials": base64.b64encode(reusable).decode(),
                             "type": reusable_type,
-                        }, f)
+                        },
+                        f,
+                    )
 
         elif packet.is_cmd(Packet.Type.auth_failure):
             ap_login_failed = Keyexchange.APLoginFailed()
@@ -1071,30 +1100,29 @@ class Session(Closeable, MessageListener, SubListener):
         device_type = Connect.DeviceType.COMPUTER
         preferred_locale = "en"
 
-        def __init__(self, conf: Session.Configuration = None):
+        def __init__(self, conf = None):
             if conf is None:
                 self.conf = Session.Configuration.Builder().build()
             else:
                 self.conf = conf
 
-        def set_preferred_locale(self, locale: str) -> Session.AbsBuilder:
+        def set_preferred_locale(self, locale: str):
             if len(locale) != 2:
                 raise TypeError("Invalid locale: {}".format(locale))
             self.preferred_locale = locale
             return self
 
-        def set_device_name(self, device_name: str) -> Session.AbsBuilder:
+        def set_device_name(self, device_name: str):
             self.device_name = device_name
             return self
 
-        def set_device_id(self, device_id: str) -> Session.AbsBuilder:
+        def set_device_id(self, device_id: str):
             if self.device_id is not None and len(device_id) != 40:
                 raise TypeError("Device ID must be 40 chars long.")
             self.device_id = device_id
             return self
 
-        def set_device_type(
-                self, device_type) -> Session.AbsBuilder:
+        def set_device_type(self, device_type):
             self.device_type = device_type
             return self
 
@@ -1141,27 +1169,22 @@ class Session(Closeable, MessageListener, SubListener):
             self.write(struct.pack(">h", data))
 
     class Builder(AbsBuilder):
-        login_credentials: Authentication.LoginCredentials = None
+        login_credentials = None
 
-        def blob(self, username: str, blob: bytes) -> Session.Builder:
+        def blob(self, username: str, blob: bytes):
             if self.device_id is None:
                 raise TypeError("You must specify the device ID first.")
-            self.login_credentials = self.decrypt_blob(self.device_id,
-                                                       username, blob)
+            self.login_credentials = self.decrypt_blob(self.device_id, username, blob)
             return self
 
-        def decrypt_blob(
-                self, device_id: str, username: str,
-                encrypted_blob: bytes) -> Authentication.LoginCredentials:
+        def decrypt_blob(self, device_id: str, username: str, encrypted_blob: bytes):
             encrypted_blob = base64.b64decode(encrypted_blob)
             sha1 = SHA1.new()
             sha1.update(device_id.encode())
             secret = sha1.digest()
-            base_key = PBKDF2(secret,
-                              username.encode(),
-                              20,
-                              0x100,
-                              hmac_hash_module=SHA1)
+            base_key = PBKDF2(
+                secret, username.encode(), 20, 0x100, hmac_hash_module=SHA1
+            )
             sha1 = SHA1.new()
             sha1.update(base_key)
             key = sha1.digest() + b"\x00\x00\x00\x14"
@@ -1179,8 +1202,8 @@ class Session(Closeable, MessageListener, SubListener):
             type_ = Authentication.AuthenticationType.Name(type_int)
             if type_ is None:
                 raise IOError(
-                    TypeError(
-                        "Unknown AuthenticationType: {}".format(type_int)))
+                    TypeError("Unknown AuthenticationType: {}".format(type_int))
+                )
             blob.read(1)
             l = self.read_blob_int(blob)
             auth_data = blob.read(l)
@@ -1195,7 +1218,7 @@ class Session(Closeable, MessageListener, SubListener):
             if (int(lo[0]) & 0x80) == 0:
                 return int(lo[0])
             hi = buffer.read(1)
-            return int(lo[0]) & 0x7f | int(hi[0]) << 7
+            return int(lo[0]) & 0x7F | int(hi[0]) << 7
 
         def stored(self):
             """
@@ -1203,8 +1226,7 @@ class Session(Closeable, MessageListener, SubListener):
             """
             pass
 
-        def stored_file(self,
-                        stored_credentials: str = None) -> Session.Builder:
+        def stored_file(self, stored_credentials: str = None):
             """
             Create credential from stored file
             Args:
@@ -1223,8 +1245,7 @@ class Session(Closeable, MessageListener, SubListener):
                 else:
                     try:
                         self.login_credentials = Authentication.LoginCredentials(
-                            typ=Authentication.AuthenticationType.Value(
-                                obj["type"]),
+                            typ=Authentication.AuthenticationType.Value(obj["type"]),
                             username=obj["username"],
                             auth_data=base64.b64decode(obj["credentials"]),
                         )
@@ -1232,7 +1253,7 @@ class Session(Closeable, MessageListener, SubListener):
                         pass
             return self
 
-        def user_pass(self, username: str, password: str) -> Session.Builder:
+        def user_pass(self, username: str, password: str):
             """
             Create credential from username and password
             Args:
@@ -1248,7 +1269,7 @@ class Session(Closeable, MessageListener, SubListener):
             )
             return self
 
-        def create(self) -> Session:
+        def create(self):
             """
             Create the Session instance
             Returns:
@@ -1339,49 +1360,48 @@ class Session(Closeable, MessageListener, SubListener):
 
             # Stored credentials
             store_credentials: bool = True
-            stored_credentials_file: str = os.path.join(
-                os.getcwd(), "credentials.json")
+            stored_credentials_file: str = os.path.join(os.getcwd(), "credentials.json")
 
             # Fetching
             retry_on_chunk_error: bool = True
 
             # def set_proxy_enabled(
             #         self,
-            #         proxy_enabled: bool) -> Session.Configuration.Builder:
+            #         proxy_enabled: bool):
             #     self.proxyEnabled = proxy_enabled
             #     return self
 
             # def set_proxy_type(
             #         self,
-            #         proxy_type: Proxy.Type) -> Session.Configuration.Builder:
+            #         proxy_type: Proxy.Type):
             #     self.proxyType = proxy_type
             #     return self
 
             # def set_proxy_address(
-            #         self, proxy_address: str) -> Session.Configuration.Builder:
+            #         self, proxy_address: str):
             #     self.proxyAddress = proxy_address
             #     return self
 
             # def set_proxy_auth(
-            #         self, proxy_auth: bool) -> Session.Configuration.Builder:
+            #         self, proxy_auth: bool):
             #     self.proxyAuth = proxy_auth
             #     return self
 
             # def set_proxy_username(
             #         self,
-            #         proxy_username: str) -> Session.Configuration.Builder:
+            #         proxy_username: str):
             #     self.proxyUsername = proxy_username
             #     return self
 
             # def set_proxy_password(
             #         self,
-            #         proxy_password: str) -> Session.Configuration.Builder:
+            #         proxy_password: str):
             #     self.proxyPassword = proxy_password
             #     return self
 
             def set_cache_enabled(
-                    self,
-                    cache_enabled: bool) -> Session.Configuration.Builder:
+                self, cache_enabled: bool
+            ):
                 """
                 Set cache_enabled
                 Args:
@@ -1392,8 +1412,7 @@ class Session(Closeable, MessageListener, SubListener):
                 self.cache_enabled = cache_enabled
                 return self
 
-            def set_cache_dir(self,
-                              cache_dir: str) -> Session.Configuration.Builder:
+            def set_cache_dir(self, cache_dir: str):
                 """
                 Set cache_dir
                 Args:
@@ -1405,8 +1424,8 @@ class Session(Closeable, MessageListener, SubListener):
                 return self
 
             def set_do_cache_clean_up(
-                    self,
-                    do_cache_clean_up: bool) -> Session.Configuration.Builder:
+                self, do_cache_clean_up: bool
+            ):
                 """
                 Set do_cache_clean_up
                 Args:
@@ -1418,8 +1437,8 @@ class Session(Closeable, MessageListener, SubListener):
                 return self
 
             def set_store_credentials(
-                    self,
-                    store_credentials: bool) -> Session.Configuration.Builder:
+                self, store_credentials: bool
+            ):
                 """
                 Set store_credentials
                 Args:
@@ -1431,8 +1450,8 @@ class Session(Closeable, MessageListener, SubListener):
                 return self
 
             def set_stored_credential_file(
-                    self, stored_credential_file: str
-            ) -> Session.Configuration.Builder:
+                self, stored_credential_file: str
+            ):
                 """
                 Set stored_credential_file
                 Args:
@@ -1444,8 +1463,8 @@ class Session(Closeable, MessageListener, SubListener):
                 return self
 
             def set_retry_on_chunk_error(
-                    self, retry_on_chunk_error: bool
-            ) -> Session.Configuration.Builder:
+                self, retry_on_chunk_error: bool
+            ):
                 """
                 Set retry_on_chunk_error
                 Args:
@@ -1456,7 +1475,7 @@ class Session(Closeable, MessageListener, SubListener):
                 self.retry_on_chunk_error = retry_on_chunk_error
                 return self
 
-            def build(self) -> Session.Configuration:
+            def build(self):
                 """
                 Build Configuration instance
                 Returns:
@@ -1487,8 +1506,7 @@ class Session(Closeable, MessageListener, SubListener):
             self.__socket = sock
 
         @staticmethod
-        def create(address: str, conf) \
-                -> Session.ConnectionHolder:
+        def create(address: str, conf):
             """
             Create the ConnectionHolder instance
             Args:
@@ -1579,7 +1597,7 @@ class Session(Closeable, MessageListener, SubListener):
             self.write(struct.pack(">h", data))
 
     class Inner:
-        device_type: Connect.DeviceType = None
+        device_type = None
         device_name: str
         device_id: str
         conf = None
@@ -1587,21 +1605,22 @@ class Session(Closeable, MessageListener, SubListener):
 
         def __init__(
             self,
-            device_type: Connect.DeviceType,
+            device_type,
             device_name: str,
             preferred_locale: str,
-            conf: Session.Configuration,
+            conf = None,
             device_id: str = None,
         ):
             self.preferred_locale = preferred_locale
             self.conf = conf
             self.device_type = device_type
             self.device_name = device_name
-            self.device_id = (device_id if device_id is not None else
-                              util.random_hex_string(40))
+            self.device_id = (
+                device_id if device_id is not None else util.random_hex_string(40)
+            )
 
     class Receiver:
-        __session: Session
+        __session = None
         __thread: threading.Thread
         __running: bool = True
 
@@ -1625,18 +1644,21 @@ class Session(Closeable, MessageListener, SubListener):
                 cmd: bytes
                 try:
                     packet = self.__session.cipher_pair.receive_encoded(
-                        self.__session.connection)
+                        self.__session.connection
+                    )
                     cmd = Packet.Type.parse(packet.cmd)
                     if cmd is None:
                         self.__session.logger.info(
-                            "Skipping unknown command cmd: 0x{}, payload: {}".
-                            format(util.bytes_to_hex(packet.cmd),
-                                   packet.payload))
+                            "Skipping unknown command cmd: 0x{}, payload: {}".format(
+                                util.bytes_to_hex(packet.cmd), packet.payload
+                            )
+                        )
                         continue
                 except (RuntimeError, ConnectionResetError) as ex:
                     if self.__running:
                         self.__session.logger.fatal(
-                            "Failed reading packet! {}".format(ex))
+                            "Failed reading packet! {}".format(ex)
+                        )
                         self.__session.reconnect()
                     break
                 if not self.__running:
@@ -1644,15 +1666,18 @@ class Session(Closeable, MessageListener, SubListener):
                 if cmd == Packet.Type.ping:
                     if self.__session.scheduled_reconnect is not None:
                         self.__session.scheduler.cancel(
-                            self.__session.scheduled_reconnect)
+                            self.__session.scheduled_reconnect
+                        )
 
                     def anonymous():
                         self.__session.logger.warning(
-                            "Socket timed out. Reconnecting...")
+                            "Socket timed out. Reconnecting..."
+                        )
                         self.__session.reconnect()
 
                     self.__session.scheduled_reconnect = self.__session.scheduler.enter(
-                        2 * 60 + 5, 1, anonymous)
+                        2 * 60 + 5, 1, anonymous
+                    )
                     self.__session.send(Packet.Type.pong, packet.payload)
                 elif cmd == Packet.Type.pong_ack:
                     continue
@@ -1660,53 +1685,58 @@ class Session(Closeable, MessageListener, SubListener):
                     self.__session.__country_code = packet.payload.decode()
                     self.__session.logger.info(
                         "Received country_code: {}".format(
-                            self.__session.__country_code))
+                            self.__session.__country_code
+                        )
+                    )
                 elif cmd == Packet.Type.license_version:
                     license_version = io.BytesIO(packet.payload)
-                    license_id = struct.unpack(">h",
-                                               license_version.read(2))[0]
+                    license_id = struct.unpack(">h", license_version.read(2))[0]
                     if license_id != 0:
                         buffer = license_version.read()
                         self.__session.logger.info(
                             "Received license_version: {}, {}".format(
-                                license_id, buffer.decode()))
+                                license_id, buffer.decode()
+                            )
+                        )
                     else:
                         self.__session.logger.info(
-                            "Received license_version: {}".format(license_id))
+                            "Received license_version: {}".format(license_id)
+                        )
                 elif cmd == Packet.Type.unknown_0x10:
-                    self.__session.logger.debug("Received 0x10: {}".format(
-                        util.bytes_to_hex(packet.payload)))
+                    self.__session.logger.debug(
+                        "Received 0x10: {}".format(util.bytes_to_hex(packet.payload))
+                    )
                 elif cmd in [
-                        Packet.Type.mercury_sub, Packet.Type.mercury_unsub,
-                        Packet.Type.mercury_event, Packet.Type.mercury_req
+                    Packet.Type.mercury_sub,
+                    Packet.Type.mercury_unsub,
+                    Packet.Type.mercury_event,
+                    Packet.Type.mercury_req,
                 ]:
                     self.__session.mercury().dispatch(packet)
                 elif cmd in [Packet.Type.aes_key, Packet.Type.aes_key_error]:
                     self.__session.audio_key().dispatch(packet)
-                elif cmd in [
-                        Packet.Type.channel_error, Packet.Type.stream_chunk_res
-                ]:
+                elif cmd in [Packet.Type.channel_error, Packet.Type.stream_chunk_res]:
                     self.__session.channel().dispatch(packet)
                 elif cmd == Packet.Type.product_info:
                     self.__session.parse_product_info(packet.payload)
                 else:
-                    self.__session.logger.info("Skipping {}".format(
-                        util.bytes_to_hex(cmd)))
+                    self.__session.logger.info(
+                        "Skipping {}".format(util.bytes_to_hex(cmd))
+                    )
 
     class SpotifyAuthenticationException(Exception):
-        def __init__(self, login_failed: Keyexchange.APLoginFailed):
-            super().__init__(
-                Keyexchange.ErrorCode.Name(login_failed.error_code))
+        def __init__(self, login_failed):
+            super().__init__(Keyexchange.ErrorCode.Name(login_failed.error_code))
 
 
 class SearchManager:
     base_url = "hm://searchview/km/v4/search/"
-    __session: Session
+    __session = None
 
-    def __init__(self, session: Session):
+    def __init__(self, session = None):
         self.__session = session
 
-    def request(self, request: SearchRequest) -> typing.Any:
+    def request(self, request) -> typing.Any:
         if request.get_username() == "":
             request.set_username(self.__session.username())
         if request.get_country() == "":
@@ -1714,8 +1744,11 @@ class SearchManager:
         if request.get_locale() == "":
             request.set_locale(self.__session.preferred_locale())
         response = self.__session.mercury().send_sync(
-            RawMercuryRequest.new_builder().set_method("GET").set_uri(
-                request.build_url()).build())
+            RawMercuryRequest.new_builder()
+            .set_method("GET")
+            .set_uri(request.build_url())
+            .build()
+        )
         if response.status_code != 200:
             raise SearchManager.SearchException(response.status_code)
         return json.loads(response.payload)
@@ -1767,28 +1800,27 @@ class SearchManager:
         def get_username(self) -> str:
             return self.__username
 
-        def set_catalogue(self, catalogue: str) -> SearchManager.SearchRequest:
+        def set_catalogue(self, catalogue: str):
             self.__catalogue = catalogue
             return self
 
-        def set_country(self, country: str) -> SearchManager.SearchRequest:
+        def set_country(self, country: str):
             self.__country = country
             return self
 
-        def set_image_size(self,
-                           image_size: str) -> SearchManager.SearchRequest:
+        def set_image_size(self, image_size: str):
             self.__image_size = image_size
             return self
 
-        def set_limit(self, limit: int) -> SearchManager.SearchRequest:
+        def set_limit(self, limit: int):
             self.__limit = limit
             return self
 
-        def set_locale(self, locale: str) -> SearchManager.SearchRequest:
+        def set_locale(self, locale: str):
             self.__locale = locale
             return self
 
-        def set_username(self, username: str) -> SearchManager.SearchRequest:
+        def set_username(self, username: str):
             self.__username = username
             return self
 
@@ -1796,14 +1828,15 @@ class SearchManager:
 class TokenProvider:
     logger = logging.getLogger("TokenProvider")
     token_expire_threshold = 10
-    __session: Session
-    __tokens: typing.List[StoredToken] = []
+    __session = None
+    __tokens = []
 
-    def __init__(self, session: Session):
+    def __init__(self, session = None):
         self._session = session
 
     def find_token_with_all_scopes(
-            self, scopes: typing.List[str]) -> typing.Union[StoredToken, None]:
+        self, scopes: typing.List[str]
+    ):
         for token in self.__tokens:
             if token.has_scopes(scopes):
                 return token
@@ -1812,7 +1845,7 @@ class TokenProvider:
     def get(self, scope: str) -> str:
         return self.get_token(scope).access_token
 
-    def get_token(self, *scopes) -> StoredToken:
+    def get_token(self, *scopes):
         scopes = list(scopes)
         if len(scopes) == 0:
             raise RuntimeError("The token doesn't have any scope")
@@ -1823,15 +1856,19 @@ class TokenProvider:
             else:
                 return token
         self.logger.debug(
-            "Token expired or not suitable, requesting again. scopes: {}, old_token: {}"
-            .format(scopes, token))
+            "Token expired or not suitable, requesting again. scopes: {}, old_token: {}".format(
+                scopes, token
+            )
+        )
         response = self._session.mercury().send_sync_json(
-            MercuryRequests.request_token(self._session.device_id(),
-                                          ",".join(scopes)))
+            MercuryRequests.request_token(self._session.device_id(), ",".join(scopes))
+        )
         token = TokenProvider.StoredToken(response)
         self.logger.debug(
             "Updated token successfully! scopes: {}, new_token: {}".format(
-                scopes, token))
+                scopes, token
+            )
+        )
         self.__tokens.append(token)
         return token
 
@@ -1848,10 +1885,9 @@ class TokenProvider:
             self.scopes = obj["scope"]
 
         def expired(self) -> bool:
-            return (
-                self.timestamp +
-                (self.expires_in - TokenProvider.token_expire_threshold) * 1000
-                < int(time.time_ns() / 1000))
+            return self.timestamp + (
+                self.expires_in - TokenProvider.token_expire_threshold
+            ) * 1000 < int(time.time_ns() / 1000)
 
         def has_scope(self, scope: str) -> bool:
             for s in self.scopes:

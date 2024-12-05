@@ -5,12 +5,15 @@ import math
 from librespot import util
 from librespot.crypto import Packet
 from librespot.structure import Closeable, PacketsReceiver
+from libspot.proto.Keyexchange_pb2 import BuildInfo, Platform, Product, ProductFlags
+import platform
 import io
 import logging
 import math
 import queue
 import struct
 import threading
+
 
 def bytes_to_hex(buffer: bytes) -> str:
     return binascii.hexlify(buffer).decode()
@@ -202,3 +205,38 @@ class AudioKeyManager(PacketsReceiver, Closeable):
             with self.__reference_lock:
                 self.__reference_lock.wait(AudioKeyManager.audio_key_request_timeout)
                 return self.__reference.get(block=False)
+
+
+class Version:
+    version_name = "0.0.9"
+
+    @staticmethod
+    def platform():
+        if platform.system() == "Windows":
+            return Platform.PLATFORM_WIN32_X86
+        if platform.system() == "Darwin":
+            return Platform.PLATFORM_OSX_X86
+        return Platform.PLATFORM_LINUX_X86
+
+    @staticmethod
+    def version_string():
+        return "librespot-python " + Version.version_name
+
+    @staticmethod
+    def system_info_string():
+        return (
+            Version.version_string()
+            + "; Python "
+            + platform.python_version()
+            + "; "
+            + platform.system()
+        )
+
+    @staticmethod
+    def standard_build_info():
+        return BuildInfo(
+            product=Product.PRODUCT_CLIENT,
+            product_flags=[ProductFlags.PRODUCT_FLAG_NONE],
+            platform=Version.platform(),
+            version=117300517,
+        )
