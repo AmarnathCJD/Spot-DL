@@ -1546,7 +1546,11 @@ class Session(Closeable, MessageListener, SubListener):
             Returns:
                 Bytes data from socket
             """
-            return self.__socket.recv(length)
+            try:
+                return self.__socket.recv(length)
+            except ConnectionResetError:
+                self.close()
+                self.create(ApResolver.get_random_accesspoint(), None)
 
         def read_int(self) -> int:
             """
