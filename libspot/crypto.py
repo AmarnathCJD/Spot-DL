@@ -1,5 +1,5 @@
 from Cryptodome import Random
-from librespot import util
+from libspot import util
 import io
 import re
 import struct

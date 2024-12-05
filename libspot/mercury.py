@@ -1,8 +1,8 @@
 from __future__ import annotations
-from librespot import util
-from librespot.crypto import Packet
+from libspot import util
+from libspot.crypto import Packet
 from libspot.proto import Mercury_pb2 as Mercury, Pubsub_pb2 as Pubsub
-from librespot.structure import Closeable, PacketsReceiver, SubListener
+from libspot.structure import Closeable, PacketsReceiver, SubListener
 import io
 import json
 import logging
@@ -12,7 +12,7 @@ import threading
 import typing
 
 if typing.TYPE_CHECKING:
-    from librespot.core import Session
+    from libspot.core import Session
 
 
 class JsonMercuryRequest:
@@ -268,7 +268,7 @@ class MercuryClient(Closeable, PacketsReceiver):
         payload: bytes
         status_code: int
 
-        def __init__(self, header: Mercury.Header, payload: list[bytes]):
+        def __init__(self, header, payload: list[bytes]):
             self.uri = header.uri
             self.status_code = header.status_code
             self.payload = b"".join(payload[1:])
@@ -309,10 +309,10 @@ class MercuryRequests:
 
 
 class RawMercuryRequest:
-    header: Mercury.Header
+    header = None
     payload: typing.List[bytes]
 
-    def __init__(self, header: Mercury.Header, payload: typing.List[bytes]):
+    def __init__(self, header, payload: typing.List[bytes]):
         self.header = header
         self.payload = payload
 
@@ -366,7 +366,7 @@ class RawMercuryRequest:
             return self
 
         def add_user_field(self,
-                           field: Mercury.UserField = None,
+                           field = None,
                            key: str = None,
                            value: str = None):
             if field is None and (key is None or value is None):

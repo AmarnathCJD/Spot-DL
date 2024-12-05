@@ -1,7 +1,7 @@
 from __future__ import annotations
-from librespot import util
+from libspot import util
 from libspot.proto.ContextTrack_pb2 import ContextTrack
-from librespot.util import Base62
+from libspot.util import Base62
 import re
 
 
@@ -35,7 +35,7 @@ class PlayableId:
     @staticmethod
     def from_uri(uri: str) -> PlayableId:
         if not PlayableId.is_supported(uri):
-            return UnsupportedId(uri)
+            return None
         if TrackId.pattern.search(uri) is not None:
             return TrackId.from_uri(uri)
         if EpisodeId.pattern.search(uri) is not None:
@@ -49,7 +49,7 @@ class PlayableId:
                 and not uri == "spotify:meta:delimiter")
 
     @staticmethod
-    def should_play(track: ContextTrack):
+    def should_play(track):
         return track.metadata_or_default
 
     def get_gid(self) -> bytes:

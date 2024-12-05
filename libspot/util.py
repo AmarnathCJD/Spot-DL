@@ -2,9 +2,9 @@ from Cryptodome import Random
 import binascii
 import math
 
-from librespot import util
-from librespot.crypto import Packet
-from librespot.structure import Closeable, PacketsReceiver
+from libspot import util
+from libspot.crypto import Packet
+from libspot.structure import Closeable, PacketsReceiver
 from libspot.proto.Keyexchange_pb2 import BuildInfo, Platform, Product, ProductFlags
 import platform
 import io
@@ -220,7 +220,7 @@ class Version:
 
     @staticmethod
     def version_string():
-        return "librespot-python " + Version.version_name
+        return "libspot-python " + Version.version_name
 
     @staticmethod
     def system_info_string():

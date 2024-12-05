@@ -2,11 +2,11 @@ from __future__ import annotations
 from Cryptodome.Cipher import AES
 from Cryptodome.Hash import HMAC, SHA1
 from Cryptodome.Util import Counter
-from librespot import util, Version
-from librespot.core import Session
-from librespot.crypto import DiffieHellman
+from libspot import util, Version
+from libspot.core import Session
+from libspot.crypto import DiffieHellman
 from libspot.proto import Connect_pb2 as Connect
-from librespot.structure import Closeable, Runnable, SessionListener
+from libspot.structure import Closeable, Runnable, SessionListener
 import base64
 import concurrent.futures
 import copy
@@ -34,7 +34,7 @@ class ZeroconfServer(Closeable):
         "libraryVersion": Version.version_name,
         "accountReq": "PREMIUM",
         "brandDisplayName": "kokarare1212",
-        "modelDisplayName": "librespot-python",
+        "modelDisplayName": "libspot-python",
         "voiceSupport": "NO",
         "availability": "",
         "productID": 0,
