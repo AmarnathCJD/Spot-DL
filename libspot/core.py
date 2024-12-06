@@ -1537,6 +1537,13 @@ class Session(Closeable, MessageListener, SubListener):
                 self.__buffer = io.BytesIO()
             except BrokenPipeError:
                 pass
+            except OSError as ex:
+                if ex.errno == 32:
+                    pass
+                elif ex.errno == 9:
+                    self.close()
+                    self.create(ApResolver.get_random_accesspoint(), None)
+                    self.flush()
 
         def read(self, length: int) -> bytes:
             """
