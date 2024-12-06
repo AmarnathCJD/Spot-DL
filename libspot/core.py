@@ -814,7 +814,11 @@ class Session(Closeable, MessageListener, SubListener):
         self.connection.write(b"\x00\x04")
         self.connection.write_int(2 + 4 + len(client_hello_bytes))
         self.connection.write(client_hello_bytes)
-        self.connection.flush()
+        try:
+            self.connection.flush()
+        except:
+            self.logger.error("Failed to flush connection")
+            self.reconnect()
         acc.write(b"\x00\x04")
         acc.write_int(2 + 4 + len(client_hello_bytes))
         acc.write(client_hello_bytes)
@@ -867,7 +871,11 @@ class Session(Closeable, MessageListener, SubListener):
         )
         self.connection.write_int(4 + len(client_response_plaintext_bytes))
         self.connection.write(client_response_plaintext_bytes)
-        self.connection.flush()
+        try:
+            self.connection.flush()
+        except:
+            self.logger.error("Failed to flush connection")
+            self.reconnect()
         try:
             self.connection.set_timeout(1)
             scrap = self.connection.read(4)
@@ -885,6 +893,7 @@ class Session(Closeable, MessageListener, SubListener):
             self.cipher_pair = CipherPair(buffer.read(32), buffer.read(32))
             self.__auth_lock_bool = True
         self.logger.info("Connection successfully!")
+        self.connection.start_ping()
 
     @staticmethod
     def create_client(conf) -> requests.Session:
@@ -1541,9 +1550,7 @@ class Session(Closeable, MessageListener, SubListener):
                 if ex.errno == 32:
                     pass
                 elif ex.errno == 9:
-                    self.close()
-                    self.create(ApResolver.get_random_accesspoint(), None)
-                    self.flush()
+                    raise ConnectionResetError("Connection reset by peer")
 
         def read(self, length: int) -> bytes:
             """
@@ -1556,8 +1563,7 @@ class Session(Closeable, MessageListener, SubListener):
             try:
                 return self.__socket.recv(length)
             except ConnectionResetError:
-                self.close()
-                self.create(ApResolver.get_random_accesspoint(), None)
+                raise ConnectionResetError("Connection reset by peer")
 
         def read_int(self) -> int:
             """
