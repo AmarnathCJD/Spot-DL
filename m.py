@@ -1,15 +1,5 @@
 from mutagen.id3 import ID3, SYLT, Encoding
-
-from mutagen.id3 import ID3
 audio = ID3('a.mp3')
-
-for tag, value in audio.items():
-    with open('a.txt', 'w') as f:
-        f.write(f"{tag}: {value}\n")
-        f.close()
-
-exit(0)
-
 
 def lrc_to_set(lrc_path):
     with open(lrc_path, "r") as f:
@@ -25,16 +15,10 @@ def time_to_millisecond(time):
     second = int(time[3:5])
     millisecond = int(time[6:])
     return (minute * 60 + second) * 1000 + millisecond
-lyrics_path = "0mJTAdmY8olbGQjopDYff3.lrc"  # Path to your LRC or text file
+lyrics_path = "0mJTAdmY8olbGQjopDYff3.lrc"
 sync_lrc = lrc_to_set(lyrics_path)
 
 tag = ID3("a.mp3")
 tag.setall("SYLT", [SYLT(encoding=Encoding.UTF8, lang='eng', format=2, type=1, text=sync_lrc)])
 tag.save(v2_version=3)
 print("Lyrics synced successfully!")
-# Usage
-mp3_path = "a.mp3"  # Path to your MP3 file
-
-
-
-print(sync_lrc)
