@@ -893,7 +893,6 @@ class Session(Closeable, MessageListener, SubListener):
             self.cipher_pair = CipherPair(buffer.read(32), buffer.read(32))
             self.__auth_lock_bool = True
         self.logger.info("Connection successfully!")
-        self.connection.start_ping()
 
     @staticmethod
     def create_client(conf) -> requests.Session:
