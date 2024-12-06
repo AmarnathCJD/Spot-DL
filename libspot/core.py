@@ -823,7 +823,12 @@ class Session(Closeable, MessageListener, SubListener):
         acc.write_int(2 + 4 + len(client_hello_bytes))
         acc.write(client_hello_bytes)
         # Read APResponseMessage
-        ap_response_message_length = self.connection.read_int()
+        try:
+            ap_response_message_length = self.connection.read_int()
+        except:
+            self.logger.error("Failed to read APResponseMessage length")
+            self.reconnect()
+            ap_response_message_length = self.connection.read_int()
         acc.write_int(ap_response_message_length)
         ap_response_message_bytes = self.connection.read(ap_response_message_length - 4)
         acc.write(ap_response_message_bytes)
@@ -972,7 +977,10 @@ class Session(Closeable, MessageListener, SubListener):
         """
         if self.connection is not None:
             self.connection.close()
-            self.__receiver.stop()
+            try:
+                self.__receiver.stop()
+            except:
+                pass
         self.connection = Session.ConnectionHolder.create(
             ApResolver.get_random_accesspoint(), self.__inner.conf
         )

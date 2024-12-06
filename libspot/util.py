@@ -13,7 +13,7 @@ import math
 import queue
 import struct
 import threading
-
+import datetime
 
 def bytes_to_hex(buffer: bytes) -> str:
     return binascii.hexlify(buffer).decode()
@@ -240,3 +240,15 @@ class Version:
             platform=Version.platform(),
             version=117300517,
         )
+
+def convert_milliseconds(milliseconds):
+    delta = datetime.timedelta(milliseconds=milliseconds)
+
+    hours = delta.seconds // 3600
+    minutes = (delta.seconds // 60) % 60
+    seconds = delta.seconds % 60
+    milliseconds = delta.microseconds // 1000
+
+    formatted_time = "{:02d}:{:02d}.{:03d}".format(minutes, seconds, milliseconds)
+
+    return formatted_time
