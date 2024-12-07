@@ -1,10 +1,10 @@
-from librespot.zeroconf import ZeroconfServer
+from libspot.zeroconf import ZeroconfServer
 import time
 import logging
 import pathlib
 
 zs = ZeroconfServer.Builder().create()
-logging.warning("Transfer playback from desktop client to librespot-python via Spotify Connect in order to store session")
+logging.warning("Transfer playback from desktop client to spotify-connect-local via Spotify Connect in order to store session")
 
 while True:
     time.sleep(1)
