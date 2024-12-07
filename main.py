@@ -78,6 +78,11 @@ def get_track(track_id: str, quality: str = "320"):
     )
     storage_resolve_response = StorageResolve.StorageResolveResponse()
     storage_resolve_response.ParseFromString(resp.content)
+    try:
+        lyr = get_lyrics(track_id_str)
+    except:
+        lyr = "You'd have to guess this one"
+
     return (
         str(storage_resolve_response.cdnurl[0]),
         key,
@@ -85,7 +90,7 @@ def get_track(track_id: str, quality: str = "320"):
         song.artist[0].name,
         track_id_str,
         "https://i.scdn.co/image/" + cover_id,
-        get_lyrics(track_id_str),
+        lyr,
     )
 
 
