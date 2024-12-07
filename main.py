@@ -30,13 +30,16 @@ def get_lyrics(track_id: str):
         },
     )
 
-    synced_lyric = "[ti:{title}]\n[ar:{artist}]\n[al:{album}]\n\n"
-    lines = resp.json()["lyrics"]["lines"]
-    for line in lines:
-        startms = int(line["startTimeMs"])
-        words = line["words"]
-        timeStamp = convert_milliseconds(startms)
-        synced_lyric += f"[{timeStamp}]{words}\n"
+    try:
+        synced_lyric = ""
+        lines = resp.json()["lyrics"]["lines"]
+        for line in lines:
+            startms = int(line["startTimeMs"])
+            words = line["words"]
+            timeStamp = convert_milliseconds(startms)
+            synced_lyric += f"[{timeStamp}]{words}\n"
+    except KeyError:
+        synced_lyric = "You'd have to guess this one"
 
     return synced_lyric
 
@@ -57,12 +60,12 @@ def get_track(track_id: str, quality: str = "320"):
     if len(track_id) != 22:
         track_id = search_track(track_id)
 
-    tc = track_id
-
+    track_id_str = track_id
     track_id: TrackId = TrackId.from_base62(track_id)
     song = session.api().get_metadata_4_track(track_id)
-    # print(song.file[0])
-    # id = binascii.hexlify(song.album.cover_group.image[2].file_id).decode()
+    cover_id = ""
+    if song.album.cover_group.image and len(song.album.cover_group.image) > 2:
+        cover_id = binascii.hexlify(song.album.cover_group.image[2].file_id).decode()
     # lr = get_lyrics(tc)
     key = session.audio_key().get_audio_key(song.gid, song.file[0].file_id, True)
     resp = session.api().send(
@@ -80,15 +83,28 @@ def get_track(track_id: str, quality: str = "320"):
         key,
         song.name,
         song.artist[0].name,
-        tc,
+        track_id_str,
+        "https://i.scdn.co/image/" + cover_id,
+        get_lyrics(track_id_str),
     )
 
 
 async def get_track_handler(request):
     track_id = request.match_info.get("id")
-    cdnurl, key, name, artist, tc = get_track(track_id, 320)
+    try:
+        cdnurl, key, name, artist, tc, cover, lyrics = get_track(track_id, 320)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
     return web.json_response(
-        {"cdnurl": cdnurl, "key": key.hex(), "name": name, "artist": artist, "tc": tc}
+        {
+            "cdnurl": cdnurl,
+            "key": key.hex(),
+            "name": name,
+            "artist": artist,
+            "tc": tc,
+            "cover": cover,
+            "lyrics": lyrics,
+        }
     )
 
 

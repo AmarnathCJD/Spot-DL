@@ -5,3 +5,4 @@ auth.py
 *.lrc
 *.mp3
 *.wav
+*.js

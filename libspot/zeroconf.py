@@ -2,7 +2,7 @@ from __future__ import annotations
 from Cryptodome.Cipher import AES
 from Cryptodome.Hash import HMAC, SHA1
 from Cryptodome.Util import Counter
-from libspot import util, Version
+from libspot import util
 from libspot.core import Session
 from libspot.crypto import DiffieHellman
 from libspot.proto import Connect_pb2 as Connect
@@ -31,10 +31,10 @@ class ZeroconfServer(Closeable):
         "statusString": "OK",
         "spotifyError": 0,
         "version": "2.7.1",
-        "libraryVersion": Version.version_name,
+        "libraryVersion": "0.1.0",
         "accountReq": "PREMIUM",
-        "brandDisplayName": "kokarare1212",
-        "modelDisplayName": "libspot-python",
+        "brandDisplayName": "Samsung S24",
+        "modelDisplayName": "spotify-connect-local",
         "voiceSupport": "NO",
         "availability": "",
         "productID": 0,

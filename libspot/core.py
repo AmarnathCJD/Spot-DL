@@ -771,9 +771,6 @@ class Session(Closeable, MessageListener, SubListener):
             self.__dealer_client = None
         if self.__audio_key_manager is not None:
             self.__audio_key_manager = None
-        if self.__channel_manager is not None:
-            self.__channel_manager.close()
-            self.__channel_manager = None
         if self.__event_service is not None:
             self.__event_service.close()
             self.__event_service = None
