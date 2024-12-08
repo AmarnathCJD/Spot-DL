@@ -1,13 +1,21 @@
-TBD
-
-Authentication code TBD.
-
+**Spotify Connect Based Implementation**
+- Detailing to Be Done.
 
 
 ## Disclaimer
 
-#### This Spotify Ripper is provided solely for educational purposes. It is not intended for commercial use, distribution, or to infringe upon the intellectual property rights of Spotify or any other third-party services. All content, including music, videos, and any associated media, remains the property of their respective creators and copyright holders.
+> **Warning:** This tool is provided solely for **educational purposes**. It is neither intended for commercial use, distribution, nor to infringe upon the intellectual property rights of Spotify or any other third-party services.  
+> All content, including music, videos, and any associated media, remains the property of their respective creators and copyright holders.
 
-#### By using this tool, you agree not to use it for any illegal activities, including but not limited to the unauthorized downloading, reproduction, or distribution of copyrighted materials. The creators of this tool are not responsible for any misuse or violations of copyright law.
+### By using this tool, you acknowledge and agree to the following:
 
-#### This tool is not affiliated with, endorsed, or sponsored by Spotify or any of its partners. Use of this tool is at your own risk, and the creators do not accept any liability for damages or legal consequences arising from its use.
+1. **Compliance with Laws:**  
+   You will not use this tool for any illegal activities, including, but not limited to, the unauthorized downloading, reproduction, or distribution of copyrighted materials.
+
+2. **Responsibility and Liability:**  
+   The creators of this tool are not responsible for any misuse, violations of copyright law, or other illegal activities arising from its use.
+
+3. **No Affiliation:**  
+   This tool is not affiliated with, endorsed by, or sponsored by Spotify or any of its partners.  
+
+> **Notice:** Use of this tool is entirely at your own risk. The creators disclaim any liability for damages, legal consequences, or penalties that may result from its use.  
