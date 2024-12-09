@@ -55,6 +55,25 @@ def search_track(query: str):
     tracks = resp.json()["tracks"]["items"]
     return tracks[0]["id"]
 
+def search_track(query: str):
+    token = session.tokens().get("user-read-email")
+    resp = requests.get(
+        "https://api.spotify.com/v1/search",
+        {"limit": "5", "offset": "0", "q": query, "type": "track"},
+        headers={"Authorization": "Bearer %s" % token},
+    )
+    results = []
+    for i in range(5):
+        try:
+            results.append({
+                "name": resp.json()["tracks"]["items"][i]["name"],
+                "artist": resp.json()["tracks"]["items"][i]["artists"][0]["name"],
+                "id": resp.json()["tracks"]["items"][i]["id"],
+                "year": resp.json()["tracks"]["items"][i]["album"]["release_date"][:4]
+            })
+        except:
+            pass
+    return results
 
 def get_track(track_id: str, quality: str = "320"):
     if len(track_id) != 22:
@@ -112,7 +131,19 @@ async def get_track_handler(request):
         }
     )
 
+async def search_track_handler(request):
+    query = request.match_info.get("query")
+    try:
+        results = search_track(query)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+    return web.json_response(
+        {
+            "results": results
+        }
+    )
 
 app = web.Application()
 app.router.add_get("/get_track/{id}", get_track_handler)
+app.router.add_get("/search_track/{query}", search_track_handler)
 web.run_app(app, host="0.0.0.0", port=5000)
