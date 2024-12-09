@@ -1,5 +1,6 @@
 **Spotify Connect Based Implementation**
 - Detailing to Be Done.
+- Requires Spotify Premium Account.
 
 
 ## Disclaimer
