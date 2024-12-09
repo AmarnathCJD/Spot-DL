@@ -43,8 +43,7 @@ def get_lyrics(track_id: str):
 
     return synced_lyric
 
-
-def search_track(query: str):
+def search_track_solo(query: str):
     token = session.tokens().get("user-read-email")
     resp = requests.get(
         "https://api.spotify.com/v1/search",
@@ -77,7 +76,7 @@ def search_track(query: str):
 
 def get_track(track_id: str, quality: str = "320"):
     if len(track_id) != 22:
-        track_id = search_track(track_id)
+        track_id = search_track_solo(track_id)
 
     track_id_str = track_id
     track_id: TrackId = TrackId.from_base62(track_id)
