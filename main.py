@@ -7,12 +7,21 @@ from libspot.metadata import TrackId
 from libspot.util import convert_milliseconds
 from aiohttp import web
 import requests
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+
+LOGGER = logging.getLogger("spot-dl-server")
 
 if os.path.isfile("credentials.json"):
     session = Session.Builder().stored_file().create()
 else:
     print("No credentials.json file found.")
     exit()
+
 
 def get_lyrics(track_id: str):
     token = session.tokens().get("user-read-playback-state")
@@ -56,15 +65,15 @@ def search_track_solo(query: str):
     return tracks[0]["id"]
 
 
-def search_track(query: str):
+def search_track(query: str, lim: int = 5):
     token = session.tokens().get("user-read-email")
     resp = requests.get(
         "https://api.spotify.com/v1/search",
-        {"limit": "5", "offset": "0", "q": query, "type": "track"},
+        {"limit": "{}".format(lim), "offset": "0", "q": query, "type": "track"},
         headers={"Authorization": "Bearer %s" % token},
     )
     results = []
-    for i in range(5):
+    for i in range(lim):
         try:
             results.append(
                 {
@@ -73,6 +82,9 @@ def search_track(query: str):
                     "id": resp.json()["tracks"]["items"][i]["id"],
                     "year": resp.json()["tracks"]["items"][i]["album"]["release_date"][
                         :4
+                    ],
+                    "cover": resp.json()["tracks"]["items"][i]["album"]["images"][0][
+                        "url"
                     ],
                 }
             )
@@ -107,6 +119,7 @@ def get_playlist(playlist_id: str):
             }
         )
     return playlist
+
 
 def get_track(track_id: str):
     if len(track_id) != 22:
@@ -148,8 +161,10 @@ def get_track(track_id: str):
 
 async def get_track_handler(request):
     track_id = request.match_info.get("id")
+    LOGGER.info(f"new-track-request: {track_id}")
+
     try:
-        cdnurl, key, name, artist, tc, cover, lyrics = get_track(track_id, 320)
+        cdnurl, key, name, artist, tc, cover, lyrics = get_track(track_id)
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
     return web.json_response(
@@ -167,8 +182,11 @@ async def get_track_handler(request):
 
 async def search_track_handler(request):
     query = request.match_info.get("query")
+    lim = request.query.get("lim", 5)
+
+    LOGGER.info(f"new-search-request: {query}")
     try:
-        results = search_track(query)
+        results = search_track(query, int(lim))
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
     return web.json_response({"results": results})
@@ -176,6 +194,7 @@ async def search_track_handler(request):
 
 async def get_playlist_handler(request):
     playlist_id = request.match_info.get("id")
+    LOGGER.info(f"new-playlist-request: {playlist_id}")
     try:
         results = get_playlist(playlist_id)
     except Exception as e:
