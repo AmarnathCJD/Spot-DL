@@ -6,3 +6,4 @@ auth.py
 *.mp3
 *.wav
 *.js
+*.go
