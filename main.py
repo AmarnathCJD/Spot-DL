@@ -86,6 +86,9 @@ def search_track(query: str, lim: int = 5):
                     "cover": resp.json()["tracks"]["items"][i]["album"]["images"][0][
                         "url"
                     ],
+                    "cover_small": resp.json()["tracks"]["items"][i]["album"]["images"][2][
+                        "url"
+                    ],
                 }
             )
         except:
