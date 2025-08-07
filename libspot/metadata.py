@@ -1,6 +1,5 @@
 from __future__ import annotations
 from libspot import util
-from libspot.proto.ContextTrack_pb2 import ContextTrack
 from libspot.util import Base62
 import re
 
@@ -88,9 +87,6 @@ class EpisodeId(SpotifyId, PlayableId):
     def from_hex(hex_str: str) -> EpisodeId:
         return EpisodeId(hex_str)
 
-    def to_mercury_uri(self) -> str:
-        return "hm://metadata/4/episode/{}".format(self.__hex_id)
-
     def to_spotify_uri(self) -> str:
         return "Spotify:episode:{}".format(
             PlayableId.base62.encode(util.hex_to_bytes(self.__hex_id)).decode())
@@ -100,41 +96,6 @@ class EpisodeId(SpotifyId, PlayableId):
 
     def get_gid(self) -> bytes:
         return util.hex_to_bytes(self.__hex_id)
-
-
-class ShowId(SpotifyId):
-    base62 = Base62.create_instance_with_inverted_character_set()
-    pattern = re.compile("spotify:show:(.{22})")
-    __hex_id: str
-
-    def __init__(self, hex_id: str):
-        self.__hex_id = hex_id
-
-    @staticmethod
-    def from_uri(uri: str) -> ShowId:
-        matcher = ShowId.pattern.search(uri)
-        if matcher is not None:
-            show_id = matcher.group(1)
-            return ShowId(util.bytes_to_hex(ShowId.base62.decode(show_id.encode(), 16)))
-        raise TypeError("Not a Spotify show ID: {}".format(uri))
-
-    @staticmethod
-    def from_base62(base62: str) -> ShowId:
-        return ShowId(util.bytes_to_hex(ShowId.base62.decode(base62.encode(), 16)))
-
-    @staticmethod
-    def from_hex(hex_str: str) -> ShowId:
-        return ShowId(hex_str)
-
-    def to_mercury_uri(self) -> str:
-        return "hm://metadata/4/show/{}".format(self.__hex_id)
-
-    def to_spotify_uri(self) -> str:
-        return "spotify:show:{}".format(
-            ShowId.base62.encode(util.hex_to_bytes(self.__hex_id)).decode())
-
-    def hex_id(self) -> str:
-        return self.__hex_id
 
 
 class TrackId(PlayableId, SpotifyId):

@@ -71,7 +71,9 @@ class MercuryClient(Closeable, PacketsReceiver):
             self.__partials[seq] = partial
         self.logger.debug(
             "Handling packet, cmd: 0x{}, seq: {}, flags: {}, parts: {}".format(
-                util.bytes_to_hex(packet.cmd), seq, flags, parts))
+                util.bytes_to_hex(packet.cmd), seq, flags, parts
+            )
+        )
         for _ in range(parts):
             size = struct.unpack(">H", payload.read(2))[0]
             buffer = payload.read(size)
@@ -92,30 +94,38 @@ class MercuryClient(Closeable, PacketsReceiver):
                         dispatched = True
             if not dispatched:
                 self.logger.debug(
-                    "Couldn't dispatch Mercury event seq: {}, uri: {}, code: {}, payload: {}"
-                    .format(seq, header.uri, header.status_code,
-                            response.payload))
-        elif (packet.is_cmd(Packet.Type.mercury_req)
-              or packet.is_cmd(Packet.Type.mercury_sub)
-              or packet.is_cmd(Packet.Type.mercury_sub)):
+                    "Couldn't dispatch Mercury event seq: {}, uri: {}, code: {}, payload: {}".format(
+                        seq, header.uri, header.status_code, response.payload
+                    )
+                )
+        elif (
+            packet.is_cmd(Packet.Type.mercury_req)
+            or packet.is_cmd(Packet.Type.mercury_sub)
+            or packet.is_cmd(Packet.Type.mercury_sub)
+        ):
             callback = self.__callbacks.get(seq)
             self.__callbacks.pop(seq)
             if callback is not None:
                 callback.response(response)
             else:
                 self.logger.warning(
-                    "Skipped Mercury response, seq: {}, uri: {}, code: {}".
-                    format(seq, response.uri, response.status_code))
+                    "Skipped Mercury response, seq: {}, uri: {}, code: {}".format(
+                        seq, response.uri, response.status_code
+                    )
+                )
             with self.__remove_callback_lock:
                 self.__remove_callback_lock.notify_all()
         else:
             self.logger.warning(
                 "Couldn't handle packet, seq: {}, uri: {}, code: {}".format(
-                    seq, header.uri, header.status_code))
+                    seq, header.uri, header.status_code
+                )
+            )
 
     def interested_in(self, uri: str, listener: SubListener) -> None:
         self.__subscriptions.append(
-            MercuryClient.InternalSubListener(uri, listener, False))
+            MercuryClient.InternalSubListener(uri, listener, False)
+        )
 
     def not_interested_in(self, listener: SubListener) -> None:
         try:
@@ -142,7 +152,9 @@ class MercuryClient(Closeable, PacketsReceiver):
             self.__seq_holder += 1
         self.logger.debug(
             "Send Mercury request, seq: {}, uri: {}, method: {}".format(
-                seq, request.header.uri, request.header.method))
+                seq, request.header.uri, request.header.method
+            )
+        )
         buffer.write(struct.pack(">H", 4))
         buffer.write(struct.pack(">i", seq))
         buffer.write(b"\x01")
@@ -173,8 +185,10 @@ class MercuryClient(Closeable, PacketsReceiver):
             response = callback.wait_response()
             if response is None:
                 raise IOError(
-                    "Request timeout out, {} passed, yet no response. seq: {}".
-                    format(self.mercury_request_timeout, seq))
+                    "Request timeout out, {} passed, yet no response. seq: {}".format(
+                        self.mercury_request_timeout, seq
+                    )
+                )
             return response
         except queue.Empty as e:
             raise IOError(e)
@@ -200,10 +214,12 @@ class MercuryClient(Closeable, PacketsReceiver):
                 sub = Pubsub.Subscription()
                 sub.ParseFromString(payload)
                 self.__subscriptions.append(
-                    MercuryClient.InternalSubListener(sub.uri, listener, True))
+                    MercuryClient.InternalSubListener(sub.uri, listener, True)
+                )
         else:
             self.__subscriptions.append(
-                MercuryClient.InternalSubListener(uri, listener, True))
+                MercuryClient.InternalSubListener(uri, listener, True)
+            )
         self.logger.debug("Subscribed successfully to {}!".format(uri))
 
     def unsubscribe(self, uri) -> None:
@@ -286,8 +302,7 @@ class MercuryClient(Closeable, PacketsReceiver):
             self.__reference.task_done()
 
         def wait_response(self) -> typing.Any:
-            return self.__reference.get(
-                timeout=MercuryClient.mercury_request_timeout)
+            return self.__reference.get(timeout=MercuryClient.mercury_request_timeout)
 
 
 class MercuryRequests:
@@ -303,9 +318,11 @@ class MercuryRequests:
     def request_token(device_id, scope):
         return JsonMercuryRequest(
             RawMercuryRequest.get(
-                "hm://keymaster/token/authenticated?scope={}&client_id={}&device_id={}"
-                .format(scope, MercuryRequests.keymaster_client_id,
-                        device_id)))
+                "hm://keymaster/token/authenticated?scope={}&client_id={}&device_id={}".format(
+                    scope, MercuryRequests.keymaster_client_id, device_id
+                )
+            )
+        )
 
 
 class RawMercuryRequest:
@@ -318,28 +335,35 @@ class RawMercuryRequest:
 
     @staticmethod
     def sub(uri: str):
-        return RawMercuryRequest.new_builder().set_uri(uri).set_method(
-            "SUB").build()
+        return RawMercuryRequest.new_builder().set_uri(uri).set_method("SUB").build()
 
     @staticmethod
     def unsub(uri: str):
-        return RawMercuryRequest.new_builder().set_uri(uri).set_method(
-            "UNSUB").build()
+        return RawMercuryRequest.new_builder().set_uri(uri).set_method("UNSUB").build()
 
     @staticmethod
     def get(uri: str):
-        return RawMercuryRequest.new_builder().set_uri(uri).set_method(
-            "GET").build()
+        return RawMercuryRequest.new_builder().set_uri(uri).set_method("GET").build()
 
     @staticmethod
     def send(uri: str, part: bytes):
-        return RawMercuryRequest.new_builder().set_uri(uri) \
-            .add_payload_part(part).set_method("SEND").build()
+        return (
+            RawMercuryRequest.new_builder()
+            .set_uri(uri)
+            .add_payload_part(part)
+            .set_method("SEND")
+            .build()
+        )
 
     @staticmethod
     def post(uri: str, part: bytes):
-        return RawMercuryRequest.new_builder().set_uri(uri) \
-            .set_method("POST").add_payload_part(part).build()
+        return (
+            RawMercuryRequest.new_builder()
+            .set_uri(uri)
+            .set_method("POST")
+            .add_payload_part(part)
+            .build()
+        )
 
     @staticmethod
     def new_builder():
@@ -365,10 +389,7 @@ class RawMercuryRequest:
             self.header_dict["method"] = method
             return self
 
-        def add_user_field(self,
-                           field = None,
-                           key: str = None,
-                           value: str = None):
+        def add_user_field(self, field=None, key: str = None, value: str = None):
             if field is None and (key is None or value is None):
                 return self
             try:
@@ -379,7 +400,8 @@ class RawMercuryRequest:
                 self.header_dict["user_fields"].append(field)
             if key is not None and value is not None:
                 self.header_dict["user_fields"].append(
-                    Mercury.UserField(key=key, value=value.encode()))
+                    Mercury.UserField(key=key, value=value.encode())
+                )
             return self
 
         def add_payload_part(self, part: bytes):
@@ -390,5 +412,4 @@ class RawMercuryRequest:
             return self.add_payload_part(msg)
 
         def build(self):
-            return RawMercuryRequest(Mercury.Header(**self.header_dict),
-                                     self.payload)
+            return RawMercuryRequest(Mercury.Header(**self.header_dict), self.payload)
