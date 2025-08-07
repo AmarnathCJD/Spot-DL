@@ -57,13 +57,13 @@ class ApiClient(Closeable):
         suffix: str,
         headers: typing.Union[None, typing.Dict[str, str]],
         body: typing.Union[None, bytes],
+        url: typing.Optional[str] = None,
     ) -> requests.PreparedRequest:
         if self.__client_token_str is None:
             resp = self.__client_token()
             self.__client_token_str = resp.granted_token.token
-            self.logger.debug(
-                "Updated client token: {}".format(self.__client_token_str)
-            )
+            self.logger.debug("Updated client token: {}".format(
+                self.__client_token_str))
 
         request = requests.PreparedRequest()
         request.method = method
@@ -72,11 +72,14 @@ class ApiClient(Closeable):
         if headers is not None:
             request.headers = headers
         request.headers["Authorization"] = "Bearer {}".format(
-            self.__session.tokens().get("playlist-read")
-        )
+            self.__session.tokens().get("playlist-read"))
         request.headers["client-token"] = self.__client_token_str
-        request.url = self.__base_url + suffix
+        if url is None:
+            request.url = self.__base_url + suffix
+        else:
+            request.url = url + suffix
         return request
+
 
     def send(
         self,
@@ -113,10 +116,22 @@ class ApiClient(Closeable):
                 )
             )
 
+    def sendToUrl(
+        self,
+        method: str,
+        url: str,
+        suffix: str,
+        headers: typing.Union[None, typing.Dict[str, str]],
+        body: typing.Union[None, bytes],
+    ) -> requests.Response:
+        response = self.__session.client().send(
+            self.build_request(method, suffix, headers, body, url))
+        return response
+
     def get_metadata_4_track(self, track: TrackId):
-        response = self.send(
-            "GET", "/metadata/4/track/{}".format(track.hex_id()), None, None
-        )
+        response = self.sendToUrl("GET", "https://spclient.wg.spotify.com",
+                                  "/metadata/4/track/{}".format(track.hex_id()),
+                                  None, None)
         ApiClient.StatusCodeException.check_status(response)
         body = response.content
         if body is None:
@@ -126,9 +141,9 @@ class ApiClient(Closeable):
         return proto
 
     def get_metadata_4_episode(self, episode: EpisodeId):
-        response = self.send(
-            "GET", "/metadata/4/episode/{}".format(episode.hex_id()), None, None
-        )
+        response = self.sendToUrl("GET", "https://spclient.wg.spotify.com",
+                                  "/metadata/4/episode/{}".format(episode.hex_id()),
+                                  None, None)
         ApiClient.StatusCodeException.check_status(response)
         body = response.content
         if body is None:
