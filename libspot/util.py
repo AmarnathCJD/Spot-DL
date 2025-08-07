@@ -15,6 +15,7 @@ import struct
 import threading
 import datetime
 
+
 def bytes_to_hex(buffer: bytes) -> str:
     return binascii.hexlify(buffer).decode()
 
@@ -240,6 +241,7 @@ class Version:
             platform=Version.platform(),
             version=117300517,
         )
+
 
 def convert_milliseconds(milliseconds):
     delta = datetime.timedelta(milliseconds=milliseconds)

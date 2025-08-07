@@ -86,9 +86,9 @@ def search_track(query: str, lim: int = 5):
                     "cover": resp.json()["tracks"]["items"][i]["album"]["images"][0][
                         "url"
                     ],
-                    "cover_small": resp.json()["tracks"]["items"][i]["album"]["images"][2][
-                        "url"
-                    ],
+                    "cover_small": resp.json()["tracks"]["items"][i]["album"]["images"][
+                        2
+                    ]["url"],
                 }
             )
         except:
@@ -204,9 +204,12 @@ async def get_playlist_handler(request):
         return web.json_response({"error": str(e)}, status=500)
     return web.json_response({"results": results})
 
+async def index(request):
+    return web.Response(text="Welcome to Spot-DL Server! Use /get_track/{id} or /search_track/{query} to interact with the API.")
 
 app = web.Application()
 app.router.add_get("/get_track/{id}", get_track_handler)
 app.router.add_get("/search_track/{query}", search_track_handler)
 app.router.add_get("/get_playlist/{id}", get_playlist_handler)
+app.router.add_get("/", index)
 web.run_app(app, host="0.0.0.0", port=5000)

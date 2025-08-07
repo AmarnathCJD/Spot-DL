@@ -8,7 +8,7 @@ from libspot import util
 from libspot.util import AudioKeyManager
 from libspot.crypto import CipherPair, DiffieHellman, Packet
 from libspot.mercury import MercuryClient, MercuryRequests, RawMercuryRequest
-from libspot.metadata import EpisodeId, ShowId, TrackId
+from libspot.metadata import EpisodeId, TrackId
 from libspot.proto import (
     Authentication_pb2 as Authentication,
     ClientToken_pb2 as ClientToken,
@@ -37,7 +37,6 @@ import struct
 import threading
 import time
 import typing
-import urllib.parse
 import websocket
 
 
@@ -62,8 +61,9 @@ class ApiClient(Closeable):
         if self.__client_token_str is None:
             resp = self.__client_token()
             self.__client_token_str = resp.granted_token.token
-            self.logger.debug("Updated client token: {}".format(
-                self.__client_token_str))
+            self.logger.debug(
+                "Updated client token: {}".format(self.__client_token_str)
+            )
 
         request = requests.PreparedRequest()
         request.method = method
@@ -72,14 +72,14 @@ class ApiClient(Closeable):
         if headers is not None:
             request.headers = headers
         request.headers["Authorization"] = "Bearer {}".format(
-            self.__session.tokens().get("playlist-read"))
+            self.__session.tokens().get("playlist-read")
+        )
         request.headers["client-token"] = self.__client_token_str
         if url is None:
             request.url = self.__base_url + suffix
         else:
             request.url = url + suffix
         return request
-
 
     def send(
         self,
@@ -125,13 +125,18 @@ class ApiClient(Closeable):
         body: typing.Union[None, bytes],
     ) -> requests.Response:
         response = self.__session.client().send(
-            self.build_request(method, suffix, headers, body, url))
+            self.build_request(method, suffix, headers, body, url)
+        )
         return response
 
     def get_metadata_4_track(self, track: TrackId):
-        response = self.sendToUrl("GET", "https://spclient.wg.spotify.com",
-                                  "/metadata/4/track/{}".format(track.hex_id()),
-                                  None, None)
+        response = self.sendToUrl(
+            "GET",
+            "https://spclient.wg.spotify.com",
+            "/metadata/4/track/{}".format(track.hex_id()),
+            None,
+            None,
+        )
         ApiClient.StatusCodeException.check_status(response)
         body = response.content
         if body is None:
@@ -141,9 +146,13 @@ class ApiClient(Closeable):
         return proto
 
     def get_metadata_4_episode(self, episode: EpisodeId):
-        response = self.sendToUrl("GET", "https://spclient.wg.spotify.com",
-                                  "/metadata/4/episode/{}".format(episode.hex_id()),
-                                  None, None)
+        response = self.sendToUrl(
+            "GET",
+            "https://spclient.wg.spotify.com",
+            "/metadata/4/episode/{}".format(episode.hex_id()),
+            None,
+            None,
+        )
         ApiClient.StatusCodeException.check_status(response)
         body = response.content
         if body is None:
@@ -174,18 +183,6 @@ class ApiClient(Closeable):
         if body is None:
             raise IOError()
         proto = Metadata.Artist()
-        proto.ParseFromString(body)
-        return proto
-
-    def get_metadata_4_show(self, show: ShowId):
-        response = self.send(
-            "GET", "/metadata/4/show/{}".format(show.hex_id()), None, None
-        )
-        ApiClient.StatusCodeException.check_status(response)
-        body = response.content
-        if body is None:
-            raise IOError()
-        proto = Metadata.Show()
         proto.ParseFromString(body)
         return proto
 
@@ -694,7 +691,6 @@ class Session(Closeable, MessageListener, SubListener):
     __keys: DiffieHellman
     __mercury_client: MercuryClient
     __receiver = None
-    __search = None
     __server_key = (
         b"\xac\xe0F\x0b\xff\xc20\xaf\xf4k\xfe\xc3\xbf\xbf\x86="
         b"\xa1\x91\xc6\xcc3l\x93\xa1O\xb3\xb0\x16\x12\xac\xacj"
@@ -757,7 +753,6 @@ class Session(Closeable, MessageListener, SubListener):
             self.__audio_key_manager = AudioKeyManager(self)
             self.__api = ApiClient(self)
             self.__dealer_client = DealerClient(self)
-            self.__search = SearchManager(self)
             self.__event_service = EventService(self)
             self.__auth_lock_bool = False
             self.__auth_lock.notify_all()
@@ -1012,12 +1007,6 @@ class Session(Closeable, MessageListener, SubListener):
     def reconnecting(self) -> bool:
         return not self.__closing and not self.__closed and self.connection is None
 
-    def search(self):
-        self.__wait_auth_lock()
-        if self.__search is None:
-            raise RuntimeError("Session isn't authenticated!")
-        return self.__search
-
     def send(self, cmd: bytes, payload: bytes):
         """
         Send data to socket using send_unchecked
@@ -1128,7 +1117,7 @@ class Session(Closeable, MessageListener, SubListener):
         device_type = Connect.DeviceType.COMPUTER
         preferred_locale = "en"
 
-        def __init__(self, conf = None):
+        def __init__(self, conf=None):
             if conf is None:
                 self.conf = Session.Configuration.Builder().build()
             else:
@@ -1427,9 +1416,7 @@ class Session(Closeable, MessageListener, SubListener):
             #     self.proxyPassword = proxy_password
             #     return self
 
-            def set_cache_enabled(
-                self, cache_enabled: bool
-            ):
+            def set_cache_enabled(self, cache_enabled: bool):
                 """
                 Set cache_enabled
                 Args:
@@ -1451,9 +1438,7 @@ class Session(Closeable, MessageListener, SubListener):
                 self.cache_dir = cache_dir
                 return self
 
-            def set_do_cache_clean_up(
-                self, do_cache_clean_up: bool
-            ):
+            def set_do_cache_clean_up(self, do_cache_clean_up: bool):
                 """
                 Set do_cache_clean_up
                 Args:
@@ -1464,9 +1449,7 @@ class Session(Closeable, MessageListener, SubListener):
                 self.do_cache_clean_up = do_cache_clean_up
                 return self
 
-            def set_store_credentials(
-                self, store_credentials: bool
-            ):
+            def set_store_credentials(self, store_credentials: bool):
                 """
                 Set store_credentials
                 Args:
@@ -1477,9 +1460,7 @@ class Session(Closeable, MessageListener, SubListener):
                 self.store_credentials = store_credentials
                 return self
 
-            def set_stored_credential_file(
-                self, stored_credential_file: str
-            ):
+            def set_stored_credential_file(self, stored_credential_file: str):
                 """
                 Set stored_credential_file
                 Args:
@@ -1490,9 +1471,7 @@ class Session(Closeable, MessageListener, SubListener):
                 self.stored_credentials_file = stored_credential_file
                 return self
 
-            def set_retry_on_chunk_error(
-                self, retry_on_chunk_error: bool
-            ):
+            def set_retry_on_chunk_error(self, retry_on_chunk_error: bool):
                 """
                 Set retry_on_chunk_error
                 Args:
@@ -1654,7 +1633,7 @@ class Session(Closeable, MessageListener, SubListener):
             device_type,
             device_name: str,
             preferred_locale: str,
-            conf = None,
+            conf=None,
             device_id: str = None,
         ):
             self.preferred_locale = preferred_locale
@@ -1694,7 +1673,7 @@ class Session(Closeable, MessageListener, SubListener):
                     )
                     cmd = Packet.Type.parse(packet.cmd)
                     if cmd is None:
-                        self.__session.logger.info(
+                        self.__session.logger.debug(
                             "Skipping unknown command cmd: 0x{}, payload: {}".format(
                                 util.bytes_to_hex(packet.cmd), packet.payload
                             )
@@ -1766,7 +1745,7 @@ class Session(Closeable, MessageListener, SubListener):
                 elif cmd == Packet.Type.product_info:
                     self.__session.parse_product_info(packet.payload)
                 else:
-                    self.__session.logger.info(
+                    self.__session.logger.debug(
                         "Skipping {}".format(util.bytes_to_hex(cmd))
                     )
 
@@ -1775,114 +1754,16 @@ class Session(Closeable, MessageListener, SubListener):
             super().__init__(Keyexchange.ErrorCode.Name(login_failed.error_code))
 
 
-class SearchManager:
-    base_url = "hm://searchview/km/v4/search/"
-    __session = None
-
-    def __init__(self, session = None):
-        self.__session = session
-
-    def request(self, request) -> typing.Any:
-        if request.get_username() == "":
-            request.set_username(self.__session.username())
-        if request.get_country() == "":
-            request.set_country(self.__session.country_code)
-        if request.get_locale() == "":
-            request.set_locale(self.__session.preferred_locale())
-        response = self.__session.mercury().send_sync(
-            RawMercuryRequest.new_builder()
-            .set_method("GET")
-            .set_uri(request.build_url())
-            .build()
-        )
-        if response.status_code != 200:
-            raise SearchManager.SearchException(response.status_code)
-        return json.loads(response.payload)
-
-    class SearchException(Exception):
-        def __init__(self, status_code: int):
-            super().__init__("Search failed with code {}.".format(status_code))
-
-    class SearchRequest:
-        query: typing.Final[str]
-        __catalogue = ""
-        __country = ""
-        __image_size = ""
-        __limit = 10
-        __locale = ""
-        __username = ""
-
-        def __init__(self, query: str):
-            self.query = query
-            if query == "":
-                raise TypeError
-
-        def build_url(self) -> str:
-            url = SearchManager.base_url + urllib.parse.quote(self.query)
-            url += "?entityVersion=2"
-            url += "&catalogue=" + urllib.parse.quote(self.__catalogue)
-            url += "&country=" + urllib.parse.quote(self.__country)
-            url += "&imageSize=" + urllib.parse.quote(self.__image_size)
-            url += "&limit=" + str(self.__limit)
-            url += "&locale=" + urllib.parse.quote(self.__locale)
-            url += "&username=" + urllib.parse.quote(self.__username)
-            return url
-
-        def get_catalogue(self) -> str:
-            return self.__catalogue
-
-        def get_country(self) -> str:
-            return self.__country
-
-        def get_image_size(self) -> str:
-            return self.__image_size
-
-        def get_limit(self) -> int:
-            return self.__limit
-
-        def get_locale(self) -> str:
-            return self.__locale
-
-        def get_username(self) -> str:
-            return self.__username
-
-        def set_catalogue(self, catalogue: str):
-            self.__catalogue = catalogue
-            return self
-
-        def set_country(self, country: str):
-            self.__country = country
-            return self
-
-        def set_image_size(self, image_size: str):
-            self.__image_size = image_size
-            return self
-
-        def set_limit(self, limit: int):
-            self.__limit = limit
-            return self
-
-        def set_locale(self, locale: str):
-            self.__locale = locale
-            return self
-
-        def set_username(self, username: str):
-            self.__username = username
-            return self
-
-
 class TokenProvider:
     logger = logging.getLogger("TokenProvider")
     token_expire_threshold = 10
     __session = None
     __tokens = []
 
-    def __init__(self, session = None):
+    def __init__(self, session=None):
         self._session = session
 
-    def find_token_with_all_scopes(
-        self, scopes: typing.List[str]
-    ):
+    def find_token_with_all_scopes(self, scopes: typing.List[str]):
         for token in self.__tokens:
             if token.has_scopes(scopes):
                 return token
