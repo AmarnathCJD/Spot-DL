@@ -1,22 +1,50 @@
-**Spotify Connect Based Implementation**
-- Detailing to Be Done.
-- Requires Spotify Premium Account.
+# Spotify Connect-Based Implementation
 
+A minimal implementation that enables search and download of songs from spotify (320Kbps).
+**Note:** A Spotify **Premium** account is required.
+
+---
+
+## Features
+
+* Integrates with Spotify Connect to control playback from local devices
+* Supports Spotify Desktop Clients on Windows and Linux
+* Simple authentication flow with persistent credential storage
+
+---
+
+## How to Obtain `credentials.json`
+
+1. Run the `auth.py` script:
+
+   ```bash
+   python auth.py
+   ```
+
+2. Open the **Spotify Desktop App** on your Windows or Linux system.
+
+3. In Spotify, open **Spotify Connect** and select the device named `spotify-connect-local`.
+
+4. Once authenticated, a file named `credentials.json` will be created in the working directory.
+
+---
 
 ## Disclaimer
 
-> **Warning:** This tool is provided solely for **educational purposes**. It is neither intended for commercial use, distribution, nor to infringe upon the intellectual property rights of Spotify or any other third-party services.  
-> All content, including music, videos, and any associated media, remains the property of their respective creators and copyright holders.
+> This tool is provided **strictly for educational and personal use only**. It is not affiliated with, endorsed by, or supported by Spotify AB or any of its partners.
 
-### By using this tool, you acknowledge and agree to the following:
+By using this tool, you agree to the following:
 
-1. **Compliance with Laws:**  
-   You will not use this tool for any illegal activities, including, but not limited to, the unauthorized downloading, reproduction, or distribution of copyrighted materials.
+1. **Legal Compliance**
+   You will not use this tool to engage in any unlawful activity, including unauthorized access, reproduction, or distribution of copyrighted content.
 
-2. **Responsibility and Liability:**  
-   The creators of this tool are not responsible for any misuse, violations of copyright law, or other illegal activities arising from its use.
+2. **User Responsibility**
+   The authors of this tool accept no responsibility for misuse, legal issues, or damages resulting from its use. All usage is at your own risk.
 
-3. **No Affiliation:**  
-   This tool is not affiliated with, endorsed by, or sponsored by Spotify or any of its partners.  
+3. **No Affiliation**
+   This is an independent tool and is in no way associated with Spotify or its services.
 
-> **Notice:** Use of this tool is entirely at your own risk. The creators disclaim any liability for damages, legal consequences, or penalties that may result from its use.  
+> Use this tool responsibly and at your own discretion.
+
+## License
+This project is released under the MIT License. See [LICENSE](LICENSE) for more information.
