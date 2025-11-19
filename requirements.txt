@@ -1,5 +1,7 @@
 aiohttp
 zeroconf
+requests
 pycryptodomex
+defusedxml>=0.7.1
 protobuf==3.20.1
 websocket-client==1.8.0

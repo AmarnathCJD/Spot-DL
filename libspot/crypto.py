@@ -1,3 +1,4 @@
+from __future__ import annotations
 from Cryptodome import Random
 from libspot import util
 import io
@@ -5,11 +6,14 @@ import re
 import struct
 import typing
 
+if typing.TYPE_CHECKING:
+    from libspot.core import Session
+
 
 class CipherPair:
-    __receive_cipher = None
+    __receive_cipher: Shannon
     __receive_nonce = 0
-    __send_cipher = None
+    __send_cipher: Shannon
     __send_nonce = 0
 
     def __init__(self, send_key: bytes, receive_key: bytes):
@@ -18,7 +22,8 @@ class CipherPair:
         self.__receive_cipher = Shannon()
         self.__receive_cipher.key(receive_key)
 
-    def send_encoded(self, connection, cmd: bytes, payload: bytes) -> None:
+    def send_encoded(self, connection: Session.ConnectionHolder, cmd: bytes,
+                     payload: bytes) -> None:
         """
         Send decrypted data to the socket
         :param connection:
@@ -39,7 +44,7 @@ class CipherPair:
         connection.write(mac)
         connection.flush()
 
-    def receive_encoded(self, connection):
+    def receive_encoded(self, connection: Session.ConnectionHolder) -> Packet:
         """
         Receive and parse decrypted data from the socket
         Args:
@@ -52,16 +57,15 @@ class CipherPair:
             self.__receive_nonce += 1
             header_bytes = self.__receive_cipher.decrypt(connection.read(3))
             cmd = struct.pack(">s", bytes([header_bytes[0]]))
-            payload_length = (header_bytes[1] << 8) | (header_bytes[2] & 0xFF)
+            payload_length = (header_bytes[1] << 8) | (header_bytes[2] & 0xff)
             payload_bytes = self.__receive_cipher.decrypt(
-                connection.read(payload_length)
-            )
+                connection.read(payload_length))
             mac = connection.read(4)
             expected_mac = self.__receive_cipher.finish(4)
             if mac != expected_mac:
                 raise RuntimeError()
             return Packet(cmd, payload_bytes)
-        except IndexError:
+        except (IndexError, OSError):
             raise RuntimeError("Failed to receive packet")
 
 
@@ -69,22 +73,20 @@ class DiffieHellman:
     """
     DiffieHellman Keyexchange
     """
-
     __prime = int.from_bytes(
-        b"\xff\xff\xff\xff\xff\xff\xff\xff\xc9\x0f"
-        b"\xda\xa2!h\xc24\xc4\xc6b\x8b\x80\xdc\x1c"
-        b"\xd1)\x02N\x08\x8ag\xcct\x02\x0b\xbe\xa6;"
+        b'\xff\xff\xff\xff\xff\xff\xff\xff\xc9\x0f'
+        b'\xda\xa2!h\xc24\xc4\xc6b\x8b\x80\xdc\x1c'
+        b'\xd1)\x02N\x08\x8ag\xcct\x02\x0b\xbe\xa6;'
         b'\x13\x9b"QJ\x08y\x8e4\x04\xdd\xef\x95\x19'
-        b"\xb3\xcd:C\x1b0+\nm\xf2_\x147O\xe15mmQ\xc2"
-        b"E\xe4\x85\xb5vb^~\xc6\xf4LB\xe9\xa6:6 \xff"
-        b"\xff\xff\xff\xff\xff\xff\xff",
-        byteorder="big",
-    )
+        b'\xb3\xcd:C\x1b0+\nm\xf2_\x147O\xe15mmQ\xc2'
+        b'E\xe4\x85\xb5vb^~\xc6\xf4LB\xe9\xa6:6 \xff'
+        b'\xff\xff\xff\xff\xff\xff\xff',
+        byteorder="big")
     __private_key: int
     __public_key: int
 
     def __init__(self):
-        key_data = Random.get_random_bytes(0x5F)
+        key_data = Random.get_random_bytes(0x5f)
         self.__private_key = int.from_bytes(key_data, byteorder="big")
         self.__public_key = pow(2, self.__private_key, self.__prime)
 
@@ -166,10 +168,9 @@ class Packet:
         @staticmethod
         def parse(val: typing.Union[bytes, None]) -> typing.Union[bytes, None]:
             for cmd in [
-                Packet.Type.__dict__[attr]
-                for attr in Packet.Type.__dict__
-                if re.search("__.+?__", attr) is None
-                and type(Packet.Type.__dict__[attr]) is bytes
+                    Packet.Type.__dict__[attr] for attr in Packet.Type.__dict__
+                    if re.search("__.+?__", attr) is None
+                    and type(Packet.Type.__dict__[attr]) is bytes
             ]:
                 if cmd == val:
                     return cmd
@@ -187,7 +188,7 @@ class Packet:
 class Shannon:
     n = 16
     fold = n
-    initkonst = 0x6996C53A
+    initkonst = 0x6996c53a
     keyp = 13
     r: list
     crc: list
@@ -203,7 +204,7 @@ class Shannon:
         self.init_r = [0 for _ in range(self.n)]
 
     def rotl(self, i: int, distance: int) -> int:
-        return ((i << distance) | (i >> (32 - distance))) & 0xFFFFFFFF
+        return ((i << distance) | (i >> (32 - distance))) & 0xffffffff
 
     def sbox(self, i: int) -> int:
         i ^= self.rotl(i, 5) | self.rotl(i, 7)
@@ -269,9 +270,9 @@ class Shannon:
         padding_size = int((len(key) + 3) / 4) * 4 - len(key)
         key = key + (b"\x00" * padding_size) + struct.pack("<I", len(key))
         for i in range(0, len(key), 4):
-            self.r[self.keyp] = (
-                self.r[self.keyp] ^ struct.unpack("<I", key[i : i + 4])[0]
-            )
+            self.r[self.keyp] = \
+                self.r[self.keyp] ^ \
+                struct.unpack("<I", key[i: i + 4])[0]
             self.cycle()
         for i in range(self.n):
             self.crc[i] = self.r[i]
@@ -304,8 +305,8 @@ class Shannon:
         t: int
         if self.nbuf != 0:
             while self.nbuf != 0 and n != 0:
-                self.mbuf ^= (buffer[i] & 0xFF) << (32 - self.nbuf)
-                buffer[i] ^= (self.sbuf >> (32 - self.nbuf)) & 0xFF
+                self.mbuf ^= (buffer[i] & 0xff) << (32 - self.nbuf)
+                buffer[i] ^= (self.sbuf >> (32 - self.nbuf)) & 0xff
                 i += 1
                 self.nbuf -= 8
                 n -= 1
@@ -315,12 +316,10 @@ class Shannon:
         j = n & ~0x03
         while i < j:
             self.cycle()
-            t = (
-                ((buffer[i + 3] & 0xFF) << 24)
-                | ((buffer[i + 2] & 0xFF) << 16)
-                | ((buffer[i + 1] & 0xFF) << 8)
-                | (buffer[i] & 0xFF)
-            )
+            t = ((buffer[i + 3] & 0xFF) << 24) | \
+                ((buffer[i + 2] & 0xFF) << 16) | \
+                ((buffer[i + 1] & 0xFF) << 8) | \
+                (buffer[i] & 0xFF)
             self.mac_func(t)
             t ^= self.sbuf
             buffer[i + 3] = (t >> 24) & 0xFF
@@ -334,8 +333,8 @@ class Shannon:
             self.mbuf = 0
             self.nbuf = 32
             while self.nbuf != 0 and n != 0:
-                self.mbuf ^= (buffer[i] & 0xFF) << (32 - self.nbuf)
-                buffer[i] ^= (self.sbuf >> (32 - self.nbuf)) & 0xFF
+                self.mbuf ^= (buffer[i] & 0xff) << (32 - self.nbuf)
+                buffer[i] ^= (self.sbuf >> (32 - self.nbuf)) & 0xff
                 i += 1
                 self.nbuf -= 8
                 n -= 1
@@ -350,8 +349,8 @@ class Shannon:
         t: int
         if self.nbuf != 0:
             while self.nbuf != 0 and n != 0:
-                buffer[i] ^= (self.sbuf >> (32 - self.nbuf)) & 0xFF
-                self.mbuf ^= (buffer[i] & 0xFF) << (32 - self.nbuf)
+                buffer[i] ^= (self.sbuf >> (32 - self.nbuf)) & 0xff
+                self.mbuf ^= (buffer[i] & 0xff) << (32 - self.nbuf)
                 i += 1
                 self.nbuf -= 8
                 n -= 1
@@ -361,12 +360,10 @@ class Shannon:
         j = n & ~0x03
         while i < j:
             self.cycle()
-            t = (
-                ((buffer[i + 3] & 0xFF) << 24)
-                | ((buffer[i + 2] & 0xFF) << 16)
-                | ((buffer[i + 1] & 0xFF) << 8)
-                | (buffer[i] & 0xFF)
-            )
+            t = ((buffer[i + 3] & 0xFF) << 24) | \
+                ((buffer[i + 2] & 0xFF) << 16) | \
+                ((buffer[i + 1] & 0xFF) << 8) | \
+                (buffer[i] & 0xFF)
             t ^= self.sbuf
             self.mac_func(t)
             buffer[i + 3] = (t >> 24) & 0xFF
@@ -380,8 +377,8 @@ class Shannon:
             self.mbuf = 0
             self.nbuf = 32
             while self.nbuf != 0 and n != 0:
-                buffer[i] ^= (self.sbuf >> (32 - self.nbuf)) & 0xFF
-                self.mbuf ^= (buffer[i] & 0xFF) << (32 - self.nbuf)
+                buffer[i] ^= (self.sbuf >> (32 - self.nbuf)) & 0xff
+                self.mbuf ^= (buffer[i] & 0xff) << (32 - self.nbuf)
                 i += 1
                 self.nbuf -= 8
                 n -= 1
@@ -402,14 +399,14 @@ class Shannon:
         while n > 0:
             self.cycle()
             if n >= 4:
-                buffer[i + 3] = (self.sbuf >> 24) & 0xFF
-                buffer[i + 2] = (self.sbuf >> 16) & 0xFF
-                buffer[i + 1] = (self.sbuf >> 8) & 0xFF
-                buffer[i] = self.sbuf & 0xFF
+                buffer[i + 3] = (self.sbuf >> 24) & 0xff
+                buffer[i + 2] = (self.sbuf >> 16) & 0xff
+                buffer[i + 1] = (self.sbuf >> 8) & 0xff
+                buffer[i] = self.sbuf & 0xff
                 n -= 4
                 i += 4
             else:
                 for j in range(n):
-                    buffer[i + j] = (self.sbuf >> (i * 8)) & 0xFF
+                    buffer[i + j] = (self.sbuf >> (i * 8)) & 0xff
                 break
         return bytes(buffer)
