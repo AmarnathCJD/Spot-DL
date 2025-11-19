@@ -1,20 +1,88 @@
+from __future__ import annotations
+import typing
+
+if typing.TYPE_CHECKING:
+    from libspot.audio import AbsChunkedInputStream
+    from libspot.audio.format import SuperAudioFormat
+    from libspot.core import DealerClient, Session
+    from libspot.crypto import Packet
+    from libspot.mercury import MercuryClient
+    from libspot.proto import Metadata_pb2 as Metadata
+    from requests.structures import CaseInsensitiveDict
+
+
+class AudioDecrypt:
+    def decrypt_chunk(self, chunk_index: int, buffer: bytes):
+        raise NotImplementedError
+
+    def decrypt_time_ms(self):
+        raise NotImplementedError
+
+
+class AudioQualityPicker:
+    def get_file(self,
+                 files: typing.List[Metadata.AudioFile]) -> Metadata.AudioFile:
+        raise NotImplementedError
+
+
 class Closeable:
     def close(self) -> None:
         raise NotImplementedError
 
 
-class MessageListener:
-    def on_message(self, uri: str, headers, payload: bytes):
+class FeederException(Exception):
+    pass
+
+
+class GeneralAudioStream:
+    def stream(self) -> AbsChunkedInputStream:
+        raise NotImplementedError
+
+    def codec(self) -> SuperAudioFormat:
+        raise NotImplementedError
+
+    def describe(self) -> str:
+        raise NotImplementedError
+
+    def decrypt_time_ms(self) -> int:
         raise NotImplementedError
 
 
+class GeneralWritableStream:
+    def write_chunk(self, buffer: bytearray, chunk_index: int, cached: bool):
+        raise NotImplementedError
+
+
+class HaltListener:
+    def stream_read_halted(self, chunk: int, _time: int) -> None:
+        raise NotImplementedError
+
+    def stream_read_resumed(self, chunk: int, _time: int) -> None:
+        raise NotImplementedError
+
+
+class MessageListener:
+    def on_message(self, uri: str, headers: CaseInsensitiveDict[str, str],
+                   payload: bytes):
+        raise NotImplementedError
+
+
+class NoopAudioDecrypt(AudioDecrypt):
+    def decrypt_chunk(self, chunk_index: int, buffer: bytes):
+        return buffer
+
+    def decrypt_time_ms(self):
+        return 0
+
+
 class PacketsReceiver:
-    def dispatch(self, packet):
+    def dispatch(self, packet: Packet):
         raise NotImplementedError
 
 
 class RequestListener:
-    def on_request(self, mid: str, pid: int, sender: str, command):
+    def on_request(self, mid: str, pid: int, sender: str,
+                   command: typing.Any) -> DealerClient.RequestResult:
         raise NotImplementedError
 
 
@@ -24,13 +92,13 @@ class Runnable:
 
 
 class SessionListener:
-    def session_closing(self, session) -> None:
+    def session_closing(self, session: Session) -> None:
         raise NotImplementedError
 
-    def session_changed(self, session) -> None:
+    def session_changed(self, session: Session) -> None:
         raise NotImplementedError
 
 
 class SubListener:
-    def event(self, resp) -> None:
+    def event(self, resp: MercuryClient.Response) -> None:
         raise NotImplementedError

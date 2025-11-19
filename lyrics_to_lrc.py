@@ -1,3 +1,4 @@
+# pip3 install mutagen
 from mutagen.id3 import ID3, SYLT, Encoding
 audio = ID3('a.mp3')
 
