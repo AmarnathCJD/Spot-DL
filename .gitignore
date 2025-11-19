@@ -7,3 +7,5 @@ auth.py
 *.wav
 *.js
 *.go
+.idea
+scripts/*

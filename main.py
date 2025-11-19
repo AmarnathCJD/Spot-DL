@@ -1,10 +1,10 @@
+import datetime
 import os
 import binascii
 from libspot.proto import StorageResolve_pb2 as StorageResolve
 
 from libspot.core import Session
 from libspot.metadata import TrackId
-from libspot.util import convert_milliseconds
 from aiohttp import web
 import requests
 import logging
@@ -14,6 +14,7 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
+logging.getLogger("aiohttp").setLevel(logging.WARNING)
 LOGGER = logging.getLogger("spot-dl-server")
 
 if os.path.isfile("credentials.json"):
@@ -22,6 +23,17 @@ else:
     print("No credentials.json file found.")
     exit()
 
+
+def convert_milliseconds(milliseconds):
+    delta = datetime.timedelta(milliseconds=milliseconds)
+    # hours = delta.seconds // 3600
+    minutes = (delta.seconds // 60) % 60
+    seconds = delta.seconds % 60
+    milliseconds = delta.microseconds // 1000
+
+    formatted_time = "{:02d}:{:02d}.{:03d}".format(minutes, seconds, milliseconds)
+
+    return formatted_time
 
 def get_lyrics(track_id: str):
     token = session.tokens().get("user-read-playback-state")
