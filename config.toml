@@ -1,0 +1,12 @@
+# developer api credentials 
+spotify_api_id = ""
+spotify_api_secret = ""
+
+# export path for album downloads
+library_path = "./Downloads"
+
+# time to sleep between tracks
+track_sleep = 5
+
+# time to sleep between albums
+album_sleep = 5
