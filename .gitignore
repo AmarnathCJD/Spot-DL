@@ -9,3 +9,5 @@ auth.py
 *.go
 .idea
 scripts/*
+config.toml
+.cache
