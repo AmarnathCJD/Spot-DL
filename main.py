@@ -12,6 +12,7 @@ import argparse
 import spotipy
 import toml
 from album_utils import download_album
+from artist_utils import download_all_albums_by_artist
 
 logging.basicConfig(
     level=logging.INFO,
@@ -245,17 +246,16 @@ def main():
 
     if args.url:
         url_type, spotify_id = extract_spotify_id_from_url(args.url)
+        sp = spotipy.Spotify(auth_manager=spotipy.SpotifyClientCredentials(client_id=spotify_api_id, client_secret=spotify_api_secret))
+
         if url_type == 'artist':
-            from artist_utils import download_all_albums_by_artist
             # Use spotipy to get artist name from ID
-            sp = spotipy.Spotify(auth_manager=spotipy.SpotifyClientCredentials(client_id=spotify_api_id, client_secret=spotify_api_secret))
             artist_info = sp.artist(spotify_id)
             artist_name = artist_info['name']
             download_all_albums_by_artist(spotify_api_id, spotify_api_secret, artist_name, spotipy, args, config)
             exit(0)
         elif url_type == 'album':
             # Use spotipy to get album and artist name from ID
-            sp = spotipy.Spotify(auth_manager=spotipy.SpotifyClientCredentials(client_id=spotify_api_id, client_secret=spotify_api_secret))
             album_info = sp.album(spotify_id)
             album_name = album_info['name']
             artist_name = album_info['artists'][0]['name']

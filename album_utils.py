@@ -32,7 +32,6 @@ def find_album_tracks(spotify_id, spotify_secret, artist, album, spotipy):
 
 
 def process_track(tid, args, config, album_name=None):
-    import toml
     track_sleep = float(config.get('track_sleep', 5))
     from main import get_track  # Import here to avoid circular import at module level
     cdnurl, key, name, artist, tc, cover, lyrics = get_track(tid)
@@ -84,6 +83,6 @@ def download_album(spotify_api_id, spotify_api_secret, artist, album, spotipy, a
         except Exception as e:
             print(f"Failed to download track {tid}: {e}")
     from filesystem_utils import move_artist_folder
-    move_artist_folder(args, config)
+    move_artist_folder(artist, config)
 
 
