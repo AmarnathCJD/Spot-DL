@@ -1,4 +1,5 @@
-# developer api credentials 
+# Developer api credentials 
+# Acquire from https://developer.spotify.com/dashboard
 spotify_api_id = ""
 spotify_api_secret = ""
 
