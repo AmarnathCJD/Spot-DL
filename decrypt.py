@@ -3,9 +3,6 @@ import time
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
 
-hex_key = input("Enter the decryption key: ")
-file_path = input("CDN URL: ")
-
 
 def decrypt_audio_file(file_path: str, hex_key: str) -> bytes:
     key = bytes.fromhex(hex_key)
@@ -27,18 +24,6 @@ def decrypt_audio_file(file_path: str, hex_key: str) -> bytes:
 
     return decrypted_buffer
 
-
-import requests
-
-with requests.get(file_path) as r:
-    with open("encrypted.ogg", "wb") as f:
-        f.write(r.content)
-
-file_path = "encrypted.ogg"
-decrypted_data = decrypt_audio_file(file_path, hex_key)
-
-with open("decrypted.ogg", "wb") as out_file:
-    out_file.write(decrypted_data)
 
 OggS = b"OggS"
 OggStart = b"\x00\x02"
@@ -84,6 +69,23 @@ def rebuild_ogg(filename):
         ogg_file.write(Zeroes)
 
 
-rebuild_ogg("decrypted.ogg")
+# Demo/test code only runs if this file is executed directly
+if __name__ == "__main__":
+    hex_key = input("Enter the decryption key: ")
+    file_path = input("CDN URL: ")
 
-# Demonstration of how to use the decrypt_audio_file function, and Fix the ogg file.
+    import requests
+
+    with requests.get(file_path) as r:
+        with open("encrypted.ogg", "wb") as f:
+            f.write(r.content)
+
+    file_path = "encrypted.ogg"
+    decrypted_data = decrypt_audio_file(file_path, hex_key)
+
+    with open("decrypted.ogg", "wb") as out_file:
+        out_file.write(decrypted_data)
+
+    rebuild_ogg("decrypted.ogg")
+
+    # Demonstration of how to use the decrypt_audio_file function, and Fix the ogg file.

@@ -8,6 +8,11 @@ from libspot.metadata import TrackId
 from aiohttp import web
 import requests
 import logging
+import argparse
+import spotipy
+import toml
+from album_utils import download_album
+from artist_utils import download_all_albums_by_artist
 
 logging.basicConfig(
     level=logging.INFO,
@@ -219,9 +224,61 @@ async def get_playlist_handler(request):
 async def index(request):
     return web.Response(text="Welcome to Spot-DL Server! Use /get_track/{id} or /search_track/{query} to interact with the API.")
 
-app = web.Application()
-app.router.add_get("/get_track/{id}", get_track_handler)
-app.router.add_get("/search_track/{query}", search_track_handler)
-app.router.add_get("/get_playlist/{id}", get_playlist_handler)
-app.router.add_get("/", index)
-web.run_app(app, host="0.0.0.0", port=5000)
+def extract_spotify_id_from_url(url):
+    import re
+    # Match /artist/<id> or /album/<id>
+    match = re.search(r'spotify\.com/(artist|album)/([a-zA-Z0-9]+)', url)
+    if match:
+        return match.group(1), match.group(2)
+    return None, None
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-a', '--album', type=str, help='Spotify album name to download')
+    parser.add_argument('-A', '--artist', type=str, help='Spotify artist name for album search. Downloads the entire discography if no album name is passed')
+    parser.add_argument('-u', '--url', type=str, help='Spotify album or artist URL')
+    parser.add_argument('-x', '--audio-format', type=str, choices=['ogg', 'mp3'], default='ogg', help='Audio format to save (ogg or mp3)')
+    args = parser.parse_args()
+
+    config = toml.load('config.toml')
+    spotify_api_id = config.get('spotify_api_id')
+    spotify_api_secret = config.get('spotify_api_secret')
+
+    if args.url:
+        url_type, spotify_id = extract_spotify_id_from_url(args.url)
+        sp = spotipy.Spotify(auth_manager=spotipy.SpotifyClientCredentials(client_id=spotify_api_id, client_secret=spotify_api_secret))
+
+        if url_type == 'artist':
+            # Use spotipy to get artist name from ID
+            artist_info = sp.artist(spotify_id)
+            artist_name = artist_info['name']
+            download_all_albums_by_artist(spotify_api_id, spotify_api_secret, artist_name, spotipy, args, config)
+            exit(0)
+        elif url_type == 'album':
+            # Use spotipy to get album and artist name from ID
+            album_info = sp.album(spotify_id)
+            album_name = album_info['name']
+            artist_name = album_info['artists'][0]['name']
+            download_album(spotify_api_id, spotify_api_secret, artist_name, album_name, spotipy, args, config)
+            exit(0)
+        else:
+            print('Invalid or unsupported Spotify URL.')
+            exit(1)
+
+    if args.album and args.artist:
+        download_album(spotify_api_id, spotify_api_secret, args.artist, args.album, spotipy, args, config)
+        exit(0)
+    elif args.artist:
+        from artist_utils import download_all_albums_by_artist
+        download_all_albums_by_artist(spotify_api_id, spotify_api_secret, args.artist, spotipy, args, config)
+        exit(0)
+
+    app = web.Application()
+    app.router.add_get("/get_track/{id}", get_track_handler)
+    app.router.add_get("/search_track/{query}", search_track_handler)
+    app.router.add_get("/get_playlist/{id}", get_playlist_handler)
+    app.router.add_get("/", index)
+    web.run_app(app, host="0.0.0.0", port=5000)
+
+if __name__ == "__main__":
+    main()
