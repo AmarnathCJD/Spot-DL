@@ -904,7 +904,6 @@ class Session(Closeable, MessageListener, SubListener):
     __keys: DiffieHellman
     __mercury_client: MercuryClient
     __receiver: typing.Union[Receiver, None] = None
-    __search: typing.Union[SearchManager, None]
     __server_key = (b"\xac\xe0F\x0b\xff\xc20\xaf\xf4k\xfe\xc3\xbf\xbf\x86="
                     b"\xa1\x91\xc6\xcc3l\x93\xa1O\xb3\xb0\x16\x12\xac\xacj"
                     b"\xf1\x80\xe7\xf6\x14\xd9B\x9d\xbe.4fC\xe3b\xd22z\x1a"
@@ -972,7 +971,6 @@ class Session(Closeable, MessageListener, SubListener):
             self.__content_feeder = PlayableContentFeeder(self)
             self.__cache_manager = CacheManager(self)
             self.__dealer_client = DealerClient(self)
-            self.__search = SearchManager(self)
             self.__event_service = EventService(self)
             self.__auth_lock_bool = False
             self.__auth_lock.notify_all()
@@ -1009,29 +1007,46 @@ class Session(Closeable, MessageListener, SubListener):
         return self.__client
 
     def close(self) -> None:
-        """Close instance"""
         self.logger.info("Closing session. device_id: {}".format(
             self.__inner.device_id))
         self.__closing = True
         if self.__dealer_client is not None:
-            self.__dealer_client.close()
+            try:
+                self.__dealer_client.close()
+            except Exception as e:
+                self.logger.debug("dealer close: {}".format(e))
             self.__dealer_client = None
         if self.__audio_key_manager is not None:
             self.__audio_key_manager = None
         if self.__channel_manager is not None:
-            self.__channel_manager.close()
+            try:
+                self.__channel_manager.close()
+            except Exception as e:
+                self.logger.debug("channel close: {}".format(e))
             self.__channel_manager = None
         if self.__event_service is not None:
-            self.__event_service.close()
+            try:
+                self.__event_service.close()
+            except Exception as e:
+                self.logger.debug("event close: {}".format(e))
             self.__event_service = None
         if self.__receiver is not None:
-            self.__receiver.stop()
+            try:
+                self.__receiver.stop()
+            except Exception as e:
+                self.logger.debug("receiver stop: {}".format(e))
             self.__receiver = None
         if self.__client is not None:
-            self.__client.close()
+            try:
+                self.__client.close()
+            except Exception as e:
+                self.logger.debug("client close: {}".format(e))
             self.__client = None
         if self.connection is not None:
-            self.connection.close()
+            try:
+                self.connection.close()
+            except Exception as e:
+                self.logger.debug("connection close: {}".format(e))
             self.connection = None
         with self.__auth_lock:
             self.__ap_welcome = None
@@ -1235,14 +1250,19 @@ class Session(Closeable, MessageListener, SubListener):
             self.__user_attributes))
 
     def preferred_locale(self) -> str:
-        """ """
         return self.__inner.preferred_locale
 
     def reconnect(self) -> None:
-        """Reconnect to the Spotify Server"""
         if self.connection is not None:
-            self.connection.close()
-            self.__receiver.stop()
+            try:
+                self.connection.close()
+            except Exception:
+                pass
+            try:
+                self.__receiver.stop()
+            except Exception:
+                pass
+            self.connection = None
         self.connection = Session.ConnectionHolder.create(
             ApResolver.get_random_accesspoint(), self.__inner.conf)
         self.connect()
@@ -1261,22 +1281,7 @@ class Session(Closeable, MessageListener, SubListener):
         """ """
         return not self.__closing and not self.__closed and self.connection is None
 
-    def search(self) -> SearchManager:
-        """ """
-        self.__wait_auth_lock()
-        if self.__search is None:
-            raise RuntimeError("Session isn't authenticated!")
-        return self.__search
-
     def send(self, cmd: bytes, payload: bytes):
-        """Send data to socket using send_unchecked
-
-        :param cmd: Command
-        :param payload: Payload
-        :param cmd: bytes:
-        :param payload: bytes:
-
-        """
         if self.__closing and self.connection is None:
             self.logger.debug("Connection was broken while closing.")
             return
@@ -2027,8 +2032,15 @@ class Session(Closeable, MessageListener, SubListener):
             self.__running = False
 
         def run(self) -> None:
-            """Receive Packet thread function"""
+            """Receive Packet thread function.
+
+            On read failure, the receiver attempts to reconnect with exponential
+            backoff (1s -> 2s -> 4s ... capped at 60s) and resumes the receive
+            loop on success. The thread NEVER dies on transport errors; it only
+            exits when stop() is called (e.g. Session.close()).
+            """
             self.__session.logger.info("Session.Receiver started")
+            backoff = 1.0
             while self.__running:
                 packet: Packet
                 cmd: bytes
@@ -2042,12 +2054,26 @@ class Session(Closeable, MessageListener, SubListener):
                             format(util.bytes_to_hex(packet.cmd),
                                    packet.payload))
                         continue
-                except (RuntimeError, ConnectionResetError) as ex:
-                    if self.__running:
-                        self.__session.logger.fatal(
-                            "Failed reading packet! {}".format(ex))
+                    backoff = 1.0
+                except (RuntimeError, ConnectionResetError, ConnectionAbortedError,
+                        BrokenPipeError, OSError) as ex:
+                    if not self.__running:
+                        break
+                    self.__session.logger.warning(
+                        "Failed reading packet ({}: {}); reconnecting in {:.1f}s".format(
+                            type(ex).__name__, ex, backoff))
+                    time.sleep(backoff)
+                    backoff = min(backoff * 2.0, 60.0)
+                    try:
                         self.__session.reconnect()
-                    break
+                        self.__session.logger.info(
+                            "Reconnect succeeded; old Receiver exiting")
+                        return
+                    except Exception as rex:
+                        self.__session.logger.warning(
+                            "Reconnect attempt failed ({}: {}); will retry".format(
+                                type(rex).__name__, rex))
+                        continue
                 if not self.__running:
                     break
                 if cmd == Packet.Type.ping:
@@ -2113,146 +2139,6 @@ class Session(Closeable, MessageListener, SubListener):
                 Keyexchange.ErrorCode.Name(login_failed.error_code))
 
 
-class SearchManager:
-    """ """
-    base_url = "hm://searchview/km/v4/search/"
-    __session: Session
-
-    def __init__(self, session: Session):
-        self.__session = session
-
-    def request(self, request: SearchRequest) -> typing.Any:
-        """
-
-        :param request: SearchRequest:
-
-        """
-        if request.get_username() == "":
-            request.set_username(self.__session.username())
-        if request.get_country() == "":
-            request.set_country(self.__session.country_code)
-        if request.get_locale() == "":
-            request.set_locale(self.__session.preferred_locale())
-        response = self.__session.mercury().send_sync(
-            RawMercuryRequest.new_builder().set_method("GET").set_uri(
-                request.build_url()).build())
-        if response.status_code != 200:
-            raise SearchManager.SearchException(response.status_code)
-        return json.loads(response.payload)
-
-    class SearchException(Exception):
-        """ """
-
-        def __init__(self, status_code: int):
-            super().__init__("Search failed with code {}.".format(status_code))
-
-    class SearchRequest:
-        """ """
-        query: typing.Final[str]
-        __catalogue = ""
-        __country = ""
-        __image_size = ""
-        __limit = 10
-        __locale = ""
-        __username = ""
-
-        def __init__(self, query: str):
-            self.query = query
-            if query == "":
-                raise TypeError
-
-        def build_url(self) -> str:
-            """ """
-            url = SearchManager.base_url + urllib.parse.quote(self.query)
-            url += "?entityVersion=2"
-            url += "&catalogue=" + urllib.parse.quote(self.__catalogue)
-            url += "&country=" + urllib.parse.quote(self.__country)
-            url += "&imageSize=" + urllib.parse.quote(self.__image_size)
-            url += "&limit=" + str(self.__limit)
-            url += "&locale=" + urllib.parse.quote(self.__locale)
-            url += "&username=" + urllib.parse.quote(self.__username)
-            return url
-
-        def get_catalogue(self) -> str:
-            """ """
-            return self.__catalogue
-
-        def get_country(self) -> str:
-            """ """
-            return self.__country
-
-        def get_image_size(self) -> str:
-            """ """
-            return self.__image_size
-
-        def get_limit(self) -> int:
-            """ """
-            return self.__limit
-
-        def get_locale(self) -> str:
-            """ """
-            return self.__locale
-
-        def get_username(self) -> str:
-            """ """
-            return self.__username
-
-        def set_catalogue(self, catalogue: str) -> SearchManager.SearchRequest:
-            """
-
-            :param catalogue: str:
-
-            """
-            self.__catalogue = catalogue
-            return self
-
-        def set_country(self, country: str) -> SearchManager.SearchRequest:
-            """
-
-            :param country: str:
-
-            """
-            self.__country = country
-            return self
-
-        def set_image_size(self,
-                           image_size: str) -> SearchManager.SearchRequest:
-            """
-
-            :param image_size: str:
-
-            """
-            self.__image_size = image_size
-            return self
-
-        def set_limit(self, limit: int) -> SearchManager.SearchRequest:
-            """
-
-            :param limit: int:
-
-            """
-            self.__limit = limit
-            return self
-
-        def set_locale(self, locale: str) -> SearchManager.SearchRequest:
-            """
-
-            :param locale: str:
-
-            """
-            self.__locale = locale
-            return self
-
-        def set_username(self, username: str) -> SearchManager.SearchRequest:
-            """
-
-            :param username: str:
-
-            """
-            self.__username = username
-            return self
-
-
 class TokenProvider:
     """ """
     logger = logging.getLogger("Librespot:TokenProvider")
@@ -2276,19 +2162,16 @@ class TokenProvider:
         return None
 
     def get(self, scope: str) -> str:
-        """
+        tok = self.get_token(scope)
+        if tok is None:
+            raise ConnectionError(
+                "Login5 returned no token (session not authenticated or "
+                "Login5 endpoint failed)"
+            )
+        return tok.access_token
 
-        :param scope: str:
-
-        """
-        return self.get_token(scope).access_token
-
-    def get_token(self, *scopes) -> StoredToken:
-        """
-
-        :param *scopes:
-
-        """
+    def get_token(self, *scopes) -> typing.Union[StoredToken, None]:
+        """ """
         scopes = list(scopes)
         if len(scopes) == 0:
             raise RuntimeError("The token doesn't have any scope")
@@ -2308,44 +2191,54 @@ class TokenProvider:
         return token
 
     def login5(self, scopes: typing.List[str]) -> typing.Union[StoredToken, None]:
-        """Submit Login5 request for a fresh access token"""
-        
-        if self.__session.ap_welcome():
-            login5_request = Login5.LoginRequest()
-            login5_request.client_info.client_id = MercuryRequests.keymaster_client_id
-            login5_request.client_info.device_id = self.__session.device_id()
+        if not self.__session.ap_welcome():
+            self.logger.error("Login5 authentication failed: No APWelcome found")
+            return None
 
-            stored_cred = Login5Credentials.StoredCredential()
-            stored_cred.username = self.__session.username()
-            stored_cred.data = self.__session.ap_welcome().reusable_auth_credentials
-            login5_request.stored_credential.CopyFrom(stored_cred)
+        login5_request = Login5.LoginRequest()
+        login5_request.client_info.client_id = MercuryRequests.keymaster_client_id
+        login5_request.client_info.device_id = self.__session.device_id()
 
+        stored_cred = Login5Credentials.StoredCredential()
+        stored_cred.username = self.__session.username()
+        stored_cred.data = self.__session.ap_welcome().reusable_auth_credentials
+        login5_request.stored_credential.CopyFrom(stored_cred)
+
+        try:
             response = requests.post(
                 "https://login5.spotify.com/v3/login",
                 data=login5_request.SerializeToString(),
                 headers=CaseInsensitiveDict({
                     "Content-Type": "application/x-protobuf",
-                    "Accept": "application/x-protobuf"
-                    }))
+                    "Accept": "application/x-protobuf",
+                }),
+                timeout=15,
+            )
+        except (requests.RequestException, ConnectionError, TimeoutError) as e:
+            self.logger.warning("Login5 HTTP request failed: {}: {}".format(type(e).__name__, e))
+            return None
 
-            if response.status_code == 200:
-                login5_response = Login5.LoginResponse()
-                login5_response.ParseFromString(response.content)
+        if response.status_code != 200:
+            self.logger.warning("Login5 request failed with status: {}".format(response.status_code))
+            return None
 
-                if login5_response.HasField('ok'):
-                    self.logger.info("Login5 authentication successful, got access token".format(login5_response.ok.access_token))
-                    token = TokenProvider.StoredToken({
-                        "expiresIn": login5_response.ok.access_token_expires_in, # approximately one hour
-                        "accessToken": login5_response.ok.access_token,
-                        "scope": scopes
-                    })
-                    return token 
-                else:
-                    self.logger.warning("Login5 authentication failed: {}".format(login5_response.error))
-            else:
-                self.logger.warning("Login5 request failed with status: {}".format(response.status_code))
-        else:
-            self.logger.error("Login5 authentication failed: No APWelcome found")
+        login5_response = Login5.LoginResponse()
+        try:
+            login5_response.ParseFromString(response.content)
+        except Exception as e:
+            self.logger.warning("Login5 response parse failed: {}".format(e))
+            return None
+
+        if login5_response.HasField('ok'):
+            self.logger.info("Login5 authentication successful, got access token")
+            return TokenProvider.StoredToken({
+                "expiresIn": login5_response.ok.access_token_expires_in,
+                "accessToken": login5_response.ok.access_token,
+                "scope": scopes,
+            })
+
+        self.logger.warning("Login5 authentication failed: {}".format(login5_response.error))
+        return None
 
     class StoredToken:
         """ """

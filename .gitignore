@@ -9,3 +9,10 @@ auth.py
 *.go
 .idea
 scripts/*
+*.env
+*.db
+*.dat
+*.mp4
+*.session
+musicbot/*
+test_cred.py

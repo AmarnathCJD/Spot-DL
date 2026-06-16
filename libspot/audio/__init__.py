@@ -310,10 +310,18 @@ class AudioKeyManager(PacketsReceiver, Closeable):
                 self.__reference_lock.notify_all()
 
         def wait_response(self) -> bytes:
-            with self.__reference_lock:
-                self.__reference_lock.wait(
-                    AudioKeyManager.audio_key_request_timeout)
-                return self.__reference.get(block=False)
+            """Block until key() or error() puts a value, up to the configured timeout.
+
+            Returns None if the timeout expires without a response — the caller
+            interprets that as a transient failure and retries.
+            """
+            try:
+                return self.__reference.get(
+                    block=True,
+                    timeout=AudioKeyManager.audio_key_request_timeout,
+                )
+            except queue.Empty:
+                return None
 
 
 class CdnFeedHelper:

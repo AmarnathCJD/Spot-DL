@@ -2,6 +2,7 @@ aiohttp
 zeroconf
 requests
 pycryptodomex
+Pillow
 defusedxml>=0.7.1
 protobuf==6.33.0
 websocket-client==1.8.0
