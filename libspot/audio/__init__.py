@@ -227,28 +227,34 @@ class AbsChunkedInputStream(io.BytesIO, HaltListener):
 class AudioKeyManager(PacketsReceiver, Closeable):
     audio_key_request_timeout = 20
     logger = logging.getLogger("Librespot:AudioKeyManager")
-    __callbacks: typing.Dict[int, Callback] = {}
-    __seq_holder = 0
     __seq_holder_lock = threading.Condition()
     __session: Session
     __zero_short = b"\x00\x00"
 
     def __init__(self, session: Session):
         self.__session = session
+        self.__callbacks: typing.Dict[int, "AudioKeyManager.Callback"] = {}
+        self.__callbacks_lock = threading.Lock()
+        self.__seq_holder = 0
 
     def dispatch(self, packet: Packet) -> None:
         payload = io.BytesIO(packet.payload)
         seq = struct.unpack(">i", payload.read(4))[0]
-        callback = self.__callbacks.get(seq)
+        with self.__callbacks_lock:
+            callback = self.__callbacks.pop(seq, None)
         if callback is None:
             self.logger.warning(
-                "Couldn't find callback for seq: {}".format(seq))
+                "Couldn't find callback for seq: {} (cmd: {})".format(
+                    seq, packet.cmd))
             return
         if packet.is_cmd(Packet.Type.aes_key):
             key = payload.read(16)
+            self.logger.debug("aes_key seq={} -> delivering key".format(seq))
             callback.key(key)
         elif packet.is_cmd(Packet.Type.aes_key_error):
             code = struct.unpack(">H", payload.read(2))[0]
+            self.logger.warning(
+                "aes_key_error seq={} code={}".format(seq, code))
             callback.error(code)
         else:
             self.logger.warning(
@@ -259,27 +265,54 @@ class AudioKeyManager(PacketsReceiver, Closeable):
                       gid: bytes,
                       file_id: bytes,
                       retry: bool = True) -> bytes:
-        seq: int
         with self.__seq_holder_lock:
             seq = self.__seq_holder
             self.__seq_holder += 1
+        callback = AudioKeyManager.SyncCallback(self)
+        with self.__callbacks_lock:
+            self.__callbacks[seq] = callback
         out = io.BytesIO()
         out.write(file_id)
         out.write(gid)
         out.write(struct.pack(">i", seq))
         out.write(self.__zero_short)
         out.seek(0)
-        self.__session.send(Packet.Type.request_key, out.read())
-        callback = AudioKeyManager.SyncCallback(self)
-        self.__callbacks[seq] = callback
+        self.logger.debug(
+            "request_key seq={} gid={} fileId={}".format(
+                seq, util.bytes_to_hex(gid), util.bytes_to_hex(file_id)))
+        try:
+            self.__session.send(Packet.Type.request_key, out.read())
+        except Exception as e:
+            with self.__callbacks_lock:
+                self.__callbacks.pop(seq, None)
+            raise
         key = callback.wait_response()
         if key is None:
+            with self.__callbacks_lock:
+                self.__callbacks.pop(seq, None)
+            self.logger.warning(
+                "audio key request timed out or errored "
+                "(seq={} gid={} fileId={} retry={})".format(
+                    seq, util.bytes_to_hex(gid),
+                    util.bytes_to_hex(file_id), retry))
             if retry:
                 return self.get_audio_key(gid, file_id, False)
             raise RuntimeError(
                 "Failed fetching audio key! gid: {}, fileId: {}".format(
                     util.bytes_to_hex(gid), util.bytes_to_hex(file_id)))
         return key
+
+    def close(self) -> None:
+        with self.__callbacks_lock:
+            pending = list(self.__callbacks.items())
+            self.__callbacks.clear()
+        for seq, cb in pending:
+            self.logger.warning(
+                "AudioKeyManager.close: aborting pending seq={}".format(seq))
+            try:
+                cb.error(-1)
+            except Exception:
+                pass
 
     class Callback:
 
@@ -291,23 +324,18 @@ class AudioKeyManager(PacketsReceiver, Closeable):
 
     class SyncCallback(Callback):
         __audio_key_manager: AudioKeyManager
-        __reference = queue.Queue()
-        __reference_lock = threading.Condition()
 
         def __init__(self, audio_key_manager: AudioKeyManager):
             self.__audio_key_manager = audio_key_manager
+            self.__reference: queue.Queue = queue.Queue()
 
         def key(self, key: bytes) -> None:
-            with self.__reference_lock:
-                self.__reference.put(key)
-                self.__reference_lock.notify_all()
+            self.__reference.put(key)
 
         def error(self, code: int) -> None:
             self.__audio_key_manager.logger.fatal(
                 "Audio key error, code: {}".format(code))
-            with self.__reference_lock:
-                self.__reference.put(None)
-                self.__reference_lock.notify_all()
+            self.__reference.put(None)
 
         def wait_response(self) -> bytes:
             """Block until key() or error() puts a value, up to the configured timeout.

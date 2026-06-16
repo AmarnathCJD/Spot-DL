@@ -69,9 +69,14 @@ _TRANSIENT_KEYWORDS = (
     "failed to receive packet", "session isn't authenticated",
 )
 
+_TRANSIENT_STATUS_CODES = {401, 403, 429, 500, 502, 503, 504}
+
 
 def _looks_transient(e: BaseException) -> bool:
     if isinstance(e, _TRANSIENT_ERRORS):
+        return True
+    code = getattr(e, "code", None)
+    if isinstance(code, int) and code in _TRANSIENT_STATUS_CODES:
         return True
     msg = str(e).lower()
     return any(s in msg for s in _TRANSIENT_KEYWORDS)

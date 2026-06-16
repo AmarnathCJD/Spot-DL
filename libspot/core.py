@@ -1017,6 +1017,10 @@ class Session(Closeable, MessageListener, SubListener):
                 self.logger.debug("dealer close: {}".format(e))
             self.__dealer_client = None
         if self.__audio_key_manager is not None:
+            try:
+                self.__audio_key_manager.close()
+            except Exception as e:
+                self.logger.debug("audio_key close: {}".format(e))
             self.__audio_key_manager = None
         if self.__channel_manager is not None:
             try:
