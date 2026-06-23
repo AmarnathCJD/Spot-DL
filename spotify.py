@@ -73,6 +73,12 @@ _TRANSIENT_STATUS_CODES = {401, 403, 429, 500, 502, 503, 504}
 
 
 def _looks_transient(e: BaseException) -> bool:
+    try:
+        import requests.exceptions as _rex
+        if isinstance(e, (_rex.JSONDecodeError, _rex.InvalidJSONError)):
+            return False
+    except ImportError:
+        pass
     if isinstance(e, _TRANSIENT_ERRORS):
         return True
     code = getattr(e, "code", None)
@@ -153,51 +159,113 @@ def get_lyrics(track_id: str) -> tuple[str, tuple[int, int, int] | None]:
     return synced, bg_color
 
 
-def _spclient_search(query: str, lim: int):
+PATHFINDER_URL = "https://api-partner.spotify.com/pathfinder/v1/query"
+
+PATHFINDER_SEARCH_HASH = "75bbf6bfcfdf85b8fc828417bfad92b7cd66bf7f556d85670f4da8292373ebec"
+
+
+def _get_client_token() -> str:
+    api = get_session().api()
+    ct = getattr(api, "_ApiClient__client_token_str", None)
+    if ct:
+        return ct
+    resp = api._ApiClient__client_token()
+    return resp.granted_token.token
+
+
+def _pick_cover(sources: list) -> str:
+    """Choose the largest cover URL from a pathfinder `coverArt.sources` array."""
+    if not sources:
+        return ""
+    sized = [s for s in sources if s.get("url")]
+    if not sized:
+        return ""
+    sized.sort(key=lambda s: (s.get("width") or 0), reverse=True)
+    return sized[0]["url"]
+
+
+def _pathfinder_search(query: str, lim: int) -> list[dict]:
     token = get_session().tokens().get("user-read-email")
+    client_token = _get_client_token()
+
+    import json as _json
+    variables = _json.dumps({
+        "searchTerm": query,
+        "offset": 0,
+        "limit": int(lim),
+        "numberOfTopResults": int(lim),
+        "includeAudiobooks": False,
+    })
+    extensions = _json.dumps({
+        "persistedQuery": {
+            "version": 1,
+            "sha256Hash": PATHFINDER_SEARCH_HASH,
+        },
+    })
     resp = requests.get(
-        "https://spclient.wg.spotify.com/searchview/km/v4/search/"
-        + requests.utils.quote(query),
+        PATHFINDER_URL,
         params={
-            "entityVersion": "2",
-            "limit": str(lim),
-            "catalogue": "premium",
-            "country": get_session().country_code or "US",
-            "locale": "en",
-            "imageSize": "small",
+            "operationName": "searchDesktop",
+            "variables": variables,
+            "extensions": extensions,
         },
         headers={
             "Authorization": f"Bearer {token}",
             "User-Agent": SPCLIENT_UA,
             "Accept": "application/json",
+            "client-token": client_token,
         },
+        timeout=15,
     )
-    return resp.json()["results"]["tracks"]["hits"]
+    if resp.status_code != 200:
+        LOGGER.warning(
+            f"pathfinder search {resp.status_code}: {resp.text[:200]!r}"
+        )
+        if resp.status_code == 400 and "persistedQuery" in resp.text:
+            raise RuntimeError(
+                "pathfinder persistedQuery hash rejected — update PATHFINDER_SEARCH_HASH"
+            )
+        return []
+    try:
+        data = resp.json()
+    except ValueError:
+        LOGGER.warning(f"pathfinder search non-JSON body: {resp.text[:200]!r}")
+        return []
+    try:
+        return data["data"]["search"]["tracks"]["items"]
+    except (KeyError, TypeError):
+        LOGGER.warning(f"pathfinder search unexpected shape: {str(data)[:200]}")
+        return []
 
 
 def search_track_solo(query: str) -> str:
     """Return the top hit's track ID for a free-text query."""
-    hits = _spclient_search(query, 1)
-    return hits[0]["uri"].split(":")[-1]
+    items = _pathfinder_search(query, 1)
+    if not items:
+        raise RuntimeError(f"no search results for {query!r}")
+    return items[0]["track"]["id"]
 
 
 def search_track(query: str, lim: int = 5) -> list[dict]:
-    """Return up to `lim` track dicts: name, artist, id, year, cover, cover_small."""
-    hits = _spclient_search(query, lim)
+    items = _pathfinder_search(query, lim)
     results: list[dict] = []
-    for hit in hits:
+    for it in items:
         try:
-            cover = hit.get("image", "")
+            track = it["track"]
+            sources = track.get("album", {}).get("coverArt", {}).get("sources") or []
+            cover = _pick_cover(sources)
+            artists = track.get("artists", {}).get("items") or []
+            artist_name = artists[0]["profile"]["name"] if artists else ""
             results.append({
-                "name": hit["name"],
-                "artist": hit["artists"][0]["name"],
-                "id": hit["uri"].split(":")[-1],
+                "name": track["name"],
+                "artist": artist_name,
+                "id": track["id"],
                 "year": "",
                 "cover": cover,
                 "cover_small": cover,
             })
-        except (KeyError, IndexError):
-            pass
+        except (KeyError, IndexError, TypeError):
+            continue
     return results
 
 
