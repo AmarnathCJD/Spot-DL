@@ -1294,6 +1294,10 @@ class Session(Closeable, MessageListener, SubListener):
         with self.__auth_lock:
             if self.cipher_pair is None or self.__auth_lock_bool:
                 self.__auth_lock.wait()
+            if self.connection is None or self.cipher_pair is None:
+                raise ConnectionError(
+                    "Session reconnect in progress; send aborted"
+                )
             self.__send_unchecked(cmd, payload)
 
     def tokens(self) -> TokenProvider:
@@ -1386,7 +1390,13 @@ class Session(Closeable, MessageListener, SubListener):
             raise RuntimeError("Unknown CMD 0x" + packet.cmd.hex())
 
     def __send_unchecked(self, cmd: bytes, payload: bytes) -> None:
-        self.cipher_pair.send_encoded(self.connection, cmd, payload)
+        conn = self.connection
+        cipher = self.cipher_pair
+        if conn is None or cipher is None:
+            raise ConnectionError(
+                "Session reconnect in progress; send aborted"
+            )
+        cipher.send_encoded(conn, cmd, payload)
 
     def __wait_auth_lock(self) -> None:
         if self.__closing and self.connection is None:

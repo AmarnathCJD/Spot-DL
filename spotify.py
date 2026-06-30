@@ -4,6 +4,7 @@ import binascii
 import datetime
 import logging
 import os
+import re
 import threading
 
 import requests
@@ -67,6 +68,7 @@ _TRANSIENT_ERRORS = (
 _TRANSIENT_KEYWORDS = (
     "connection", "closed", "reset", "broken pipe", "eof", "timeout", "socket",
     "failed to receive packet", "session isn't authenticated",
+    "failed fetching audio key", "reconnect", "nonetype",
 )
 
 _TRANSIENT_STATUS_CODES = {401, 403, 429, 500, 502, 503, 504}
@@ -92,8 +94,11 @@ def with_session_retry(fn, *args, retries: int = 1, **kwargs):
     """Run fn(*args, **kwargs); on transport errors reset the session and retry.
 
     fn is expected to obtain its session via get_session() so the retry picks up
-    a freshly built one.
+    a freshly built one. A short pause separates attempts to give the librespot
+    receiver thread time to finish its own reconnect loop — otherwise a fast
+    retry races into the same half-built state.
     """
+    import time as _time
     last_exc: BaseException | None = None
     for attempt in range(retries + 1):
         try:
@@ -102,6 +107,7 @@ def with_session_retry(fn, *args, retries: int = 1, **kwargs):
             if _looks_transient(e) and attempt < retries:
                 last_exc = e
                 reset_session(f"{type(e).__name__}: {e}")
+                _time.sleep(1.5)
                 continue
             raise
     raise last_exc  # type: ignore[misc]
@@ -246,8 +252,30 @@ def search_track_solo(query: str) -> str:
     return items[0]["track"]["id"]
 
 
+_BASE62_RE = re.compile(r"^[0-9A-Za-z]{22}$")
+
+
+def _is_track_id(s: str) -> bool:
+    """Spotify base62 track IDs are exactly 22 alphanumeric characters."""
+    return bool(_BASE62_RE.match(s.strip()))
+
+
 def search_track(query: str, lim: int = 5) -> list[dict]:
-    items = _pathfinder_search(query, lim)
+    """Return up to `lim` track dicts: name, artist, id, year, cover, cover_small.
+
+    Fast-path: if `query` is itself a 22-char base62 track ID, skip the
+    pathfinder GraphQL call and resolve the track over Mercury directly —
+    same shape as a single-result search.
+    """
+    q = query.strip()
+    if _is_track_id(q):
+        meta = _resolve_track_metadata(q)
+        if not meta.get("name"):
+            return []
+        meta = {**meta, "cover_small": meta.get("cover", "")}
+        return [meta]
+
+    items = _pathfinder_search(q, lim)
     results: list[dict] = []
     for it in items:
         try:
