@@ -1,0 +1,207 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, sans-serif;
+  background: #121212;
+  color: #e8e8e8;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 32px 16px 64px;
+}
+
+h1 {
+  font-size: 1.4rem;
+  letter-spacing: 0.02em;
+}
+
+h2 {
+  font-size: 1rem;
+  text-transform: uppercase;
+  opacity: 0.6;
+  margin-top: 32px;
+}
+
+form {
+  display: flex;
+  gap: 8px;
+}
+
+.setup-form {
+  display: grid;
+  gap: 10px;
+}
+
+.setup-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+}
+
+input {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid #333;
+  background: #1c1c1c;
+  color: inherit;
+}
+
+button,
+a[download] {
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #333;
+  background: #1db954;
+  color: #08170d;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border: 1px solid #262626;
+  border-radius: 8px;
+  background: #181818;
+}
+
+.grow {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.grow strong,
+.grow em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grow em {
+  opacity: 0.6;
+  font-style: normal;
+  font-size: 0.85rem;
+}
+
+.status {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.7;
+}
+
+.status.done {
+  color: #1db954;
+  opacity: 1;
+}
+
+.status.error {
+  color: #ff6b6b;
+  opacity: 1;
+}
+
+.error {
+  font-size: 0.75rem;
+  color: #ff6b6b;
+  max-width: 220px;
+}
+
+.empty {
+  opacity: 0.5;
+}
+
+.panel {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid #262626;
+  border-radius: 8px;
+  background: #181818;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.panel-head label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.panel-head input {
+  width: 84px;
+  padding: 6px 8px;
+}
+
+.panel .list {
+  max-height: 46vh;
+  overflow-y: auto;
+  counter-reset: track;
+}
+
+.panel .row::before {
+  counter-increment: track;
+  content: counter(track);
+  min-width: 26px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.4;
+  font-size: 0.8rem;
+}
+
+.playlist-new {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.playlist-row {
+  align-items: flex-start;
+}
+
+.playlist-row .grow {
+  gap: 6px;
+}
+
+.playlist-row input {
+  width: 100%;
+}
+
+.actions-panel {
+  margin-top: 16px;
+}
+
+.status-line {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

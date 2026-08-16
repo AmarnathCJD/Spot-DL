@@ -11,6 +11,7 @@ import requests
 
 from libspot.core import Session
 from libspot.metadata import TrackId
+from libspot.proto import Metadata_pb2 as Metadata
 from libspot.proto import StorageResolve_pb2 as StorageResolve
 
 import audio
@@ -253,11 +254,31 @@ def search_track_solo(query: str) -> str:
 
 
 _BASE62_RE = re.compile(r"^[0-9A-Za-z]{22}$")
+_SPOTIFY_REF_RE = re.compile(r"(?:^|/|:)(track|playlist)[/:]([0-9A-Za-z]{22})")
 
 
 def _is_track_id(s: str) -> bool:
     """Spotify base62 track IDs are exactly 22 alphanumeric characters."""
     return bool(_BASE62_RE.match(s.strip()))
+
+
+def parse_spotify_ref(text: str, *, bare_as: str = "track") -> tuple[str, str] | None:
+    """Classify a pasted reference as ``("track" | "playlist", id)``.
+
+    Accepts web URLs (including the ``/intl-xx/`` localised form), ``spotify:``
+    URIs, and a bare 22-char ID, which is a track because that is the only
+    thing a bare ID can be resolved as without a lookup. Returns None for free
+    text so the caller can fall back to search.
+    """
+    text = text.strip()
+    m = _SPOTIFY_REF_RE.search(text)
+    if m:
+        return m.group(1), m.group(2)
+    if _is_track_id(text):
+        if bare_as not in {"track", "playlist"}:
+            raise ValueError(f"unsupported bare_as: {bare_as}")
+        return bare_as, text
+    return None
 
 
 def search_track(query: str, lim: int = 5) -> list[dict]:
@@ -326,16 +347,13 @@ def _resolve_track_metadata(track_id: str) -> dict:
         return {"name": "", "artist": "", "id": track_id, "year": "", "cover": ""}
 
 
-def get_playlist(playlist_id: str) -> list[dict]:
-    """Return a playlist's track list.
+def playlist_items(playlist_id: str) -> dict:
+    """List a playlist's track IDs in Spotify's own order, without resolving them.
 
-    Uses spclient.wg.spotify.com/playlist/v2 (Login5-token-friendly) for the
-    track URI list, then resolves each track's display metadata over Mercury
-    in parallel. The public Web API endpoint is rate-limited for librespot
-    tokens, so we avoid it entirely.
+    One HTTP call. `total` is the playlist's own `length`, which is compared
+    against the number of items actually returned so a truncated response is
+    visible instead of silently shortening the selection.
     """
-    from concurrent.futures import ThreadPoolExecutor
-
     token = get_session().tokens().get("user-read-email")
     resp = requests.get(
         f"https://spclient.wg.spotify.com/playlist/v2/playlist/{playlist_id}",
@@ -344,25 +362,68 @@ def get_playlist(playlist_id: str) -> list[dict]:
             "User-Agent": SPCLIENT_UA,
             "Accept": "application/json",
         },
-        timeout=15,
+        timeout=30,
     )
     if resp.status_code != 200:
         raise RuntimeError(f"playlist/v2 {resp.status_code}: {resp.text[:200]}")
 
     data = resp.json()
-    items = data.get("contents", {}).get("items", [])
-    track_ids: list[str] = []
-    for item in items:
-        uri = item.get("uri", "")
-        if uri.startswith("spotify:track:"):
-            track_ids.append(uri.split(":")[-1])
+    contents = data.get("contents", {})
+    ids = [
+        item["uri"].split(":")[-1]
+        for item in contents.get("items", [])
+        if item.get("uri", "").startswith("spotify:track:")
+    ]
+    return {
+        "id": playlist_id,
+        "name": data.get("attributes", {}).get("name", ""),
+        "total": data.get("length", len(ids)),
+        "returned": len(ids),
+        "truncated": bool(contents.get("truncated")),
+        "ids": ids,
+    }
 
-    if not track_ids:
+
+def select_prefix(ids: list[str], count: int) -> list[str]:
+    """The first `count` entries in the order given — no sorting, ever.
+
+    Spotify already returns a playlist in its display order, so the selection
+    is a prefix. Counts below zero select nothing; counts past the end select
+    everything.
+    """
+    return ids[: max(0, count)]
+
+
+def _resolve_ids(ids: list[str]) -> list[dict]:
+    from concurrent.futures import ThreadPoolExecutor
+
+    if not ids:
         return []
-
     with ThreadPoolExecutor(max_workers=8) as pool:
-        results = list(pool.map(_resolve_track_metadata, track_ids))
-    return [r for r in results if r.get("name")]
+        return [t for t in pool.map(_resolve_track_metadata, ids) if t.get("name")]
+
+
+def playlist_preview(playlist_id: str, count: int = 0) -> dict:
+    """The first `count` tracks of a playlist, resolved; `count=0` resolves none.
+
+    The playlist is used exactly as Spotify returns it — no re-sorting — and
+    only the selected prefix is resolved over Mercury, which is what keeps a
+    400-track playlist usable.
+    """
+    listing = playlist_items(playlist_id)
+    meta = {k: v for k, v in listing.items() if k != "ids"}
+    return {**meta, "tracks": _resolve_ids(select_prefix(listing["ids"], count))}
+
+
+def get_playlist(playlist_id: str) -> list[dict]:
+    """Return a playlist's full track list with display metadata.
+
+    Uses spclient.wg.spotify.com/playlist/v2 (Login5-token-friendly) for the
+    track URI list, then resolves each track's display metadata over Mercury
+    in parallel. The public Web API endpoint is rate-limited for librespot
+    tokens, so we avoid it entirely.
+    """
+    return _resolve_ids(playlist_items(playlist_id)["ids"])
 
 
 def radio_seed(track_id: str, count: int = 10, exclude: list[str] | None = None) -> list[dict]:
@@ -396,8 +457,83 @@ def radio_seed(track_id: str, count: int = 10, exclude: list[str] | None = None)
     return out
 
 
-def get_track(track_id_or_query: str):
-    """Resolve a track to (cdnurl, key, name, artist, tc, cover, lyrics, bg_color).
+def _date_parts(date) -> dict:
+    return {
+        key: value
+        for key, value in {
+            "year": date.year,
+            "month": date.month,
+            "day": date.day,
+            "hour": date.hour,
+            "minute": date.minute,
+        }.items()
+        if value
+    }
+
+
+def track_details(song, track_id: str) -> dict:
+    """Flatten a Track proto into the tag/display fields the mp3 pipeline needs."""
+    cover_id = ""
+    if song.album.cover_group.image and len(song.album.cover_group.image) > 2:
+        cover_id = binascii.hexlify(song.album.cover_group.image[2].file_id).decode()
+
+    isrc = ""
+    for ext in song.external_id:
+        if ext.type.lower() == "isrc":
+            isrc = ext.id
+            break
+
+    external_ids = {ext.type.lower(): ext.id for ext in song.external_id if ext.type and ext.id}
+    copyrights = [
+        {"type": Metadata.Copyright.Type.Name(c.type), "text": c.text}
+        for c in song.album.copyright
+        if c.text
+    ]
+    availability = [
+        {
+            "catalogue": a.catalogue_str,
+            "start": _date_parts(a.start),
+        }
+        for a in song.availability
+        if a.catalogue_str or a.HasField("start")
+    ]
+    audio_formats = [
+        Metadata.AudioFile.Format.Name(f.format)
+        for f in song.file
+        if f.HasField("format")
+    ]
+
+    return {
+        "id": track_id,
+        "tc": track_id,
+        "name": song.name,
+        "artist": song.artist[0].name if song.artist else "",
+        "artists": [a.name for a in song.artist],
+        "album": song.album.name,
+        "album_artist": song.album.artist[0].name if song.album.artist else "",
+        "album_type": Metadata.Album.Type.Name(song.album.type) if song.album.type else "",
+        "album_type_str": song.album.type_str,
+        "year": str(song.album.date.year) if song.album.date.year else "",
+        "release_date": _date_parts(song.album.date),
+        "track_number": song.number,
+        "disc_number": song.disc_number,
+        "isrc": isrc,
+        "external_ids": external_ids,
+        "label": song.album.label,
+        "genre": song.album.genre[0] if song.album.genre else "",
+        "duration": song.duration,
+        "explicit": song.explicit,
+        "popularity": song.popularity,
+        "copyrights": copyrights,
+        "availability": availability,
+        "audio_formats": audio_formats,
+        "licensor_uuid": binascii.hexlify(song.licensor.uuid).decode() if song.HasField("licensor") else "",
+        "cover": "https://i.scdn.co/image/" + cover_id if cover_id else "",
+    }
+
+
+def resolve_track(track_id_or_query: str):
+    """Resolve a track to (cdnurl, key, details, lyrics, bg_color).
 
     Accepts either a 22-char base62 track ID or a free-text query (which is
     routed through search_track_solo first). The CDN URL is pre-signed and
@@ -410,10 +546,6 @@ def get_track(track_id_or_query: str):
     track_id_obj: TrackId = TrackId.from_base62(track_id_str)
     sess = get_session()
     song = sess.api().get_metadata_4_track(track_id_obj)
-
-    cover_id = ""
-    if song.album.cover_group.image and len(song.album.cover_group.image) > 2:
-        cover_id = binascii.hexlify(song.album.cover_group.image[2].file_id).decode()
 
     key = sess.audio_key().get_audio_key(song.gid, song.file[0].file_id, True)
     resp = sess.api().send(
@@ -432,13 +564,19 @@ def get_track(track_id_or_query: str):
     except Exception:
         lyr, bg_color = "You'd have to guess this one", None
 
+    return str(sr.cdnurl[0]), key, track_details(song, track_id_str), lyr, bg_color
+
+
+def get_track(track_id_or_query: str):
+    """Legacy 8-tuple form of resolve_track()."""
+    cdnurl, key, det, lyr, bg_color = resolve_track(track_id_or_query)
     return (
-        str(sr.cdnurl[0]),
+        cdnurl,
         key,
-        song.name,
-        song.artist[0].name,
-        track_id_str,
-        "https://i.scdn.co/image/" + cover_id,
+        det["name"],
+        det["artist"],
+        det["id"],
+        det["cover"],
         lyr,
         bg_color,
     )
@@ -446,11 +584,8 @@ def get_track(track_id_or_query: str):
 
 def fetch_audio_ogg(track_id: str):
     """Download + decrypt the audio for `track_id`. Returns (ogg_bytes, meta_dict)."""
-    cdnurl, key, name, artist, tc, cover, lyrics, bg_color = get_track(track_id)
+    cdnurl, key, det, lyrics, bg_color = resolve_track(track_id)
     enc = requests.get(cdnurl).content
     ogg = audio.decrypt_stream(enc, key)
-    meta = {
-        "name": name, "artist": artist, "tc": tc,
-        "cover": cover, "lyrics": lyrics, "bg_color": bg_color,
-    }
+    meta = {**det, "lyrics": lyrics, "bg_color": bg_color}
     return ogg, meta

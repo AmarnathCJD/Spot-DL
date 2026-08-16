@@ -16,3 +16,9 @@ scripts/*
 *.session
 musicbot/*
 test_cred.py
+downloads/
+web/node_modules/
+web/dist/
+!web/index.html
+!web/**/*.js
+!web/**/*.json
